@@ -609,7 +609,7 @@ class Template:
                 copyfile(INTEGRAL_GOOD_FOLD + pic_name, INTEGRAL_GOOD_FOLD + copy_pic_name)
                 logging.debug('==== send picture: ' + copy_pic_name)
                 SendMessage('@img@%s' % INTEGRAL_GOOD_FOLD + copy_pic_name, to)
-                time.sleep(0.5)
+                time.sleep(1.5)
                 logging.debug('==== send text: ' + text)
                 SendMessage('@msg@%s' % text, to)
         finally:
@@ -635,7 +635,7 @@ class Template:
                     logging.debug('==== send picture: ' + str_tmp)
                     SendMessage('@img@%s' % str_tmp, to)
                     lines = ''
-                    time.sleep(0.5)
+                    time.sleep(1.5)
             if lines:
                 logging.debug('==== send text: ' + lines)
                 SendMessage('@msg@%s' % lines, to)
