@@ -27,7 +27,7 @@ print os_system
 if os_system == 'Linux':
     ORDER_FILE_PATH = u'/root/robot_data/xiaoyezi/integral_record/order_file.txt'
     GIT_DATA_FOLD = u'/root/robot_data/'
-    GIT_CODE_FOLD = u''
+    GIT_CODE_FOLD = u'/root/wechat_robot/'
     DATABASE_FOLD = u'/root/robot_data/xiaoyezi/database/'
     ACTIVITY_FOLD = u'/root/robot_data/xiaoyezi/activity/'
     TEMPLATE_FOLD = u'/root/robot_data/xiaoyezi/template/'
@@ -37,7 +37,7 @@ if os_system == 'Linux':
     INTEGRAL_RECORD_FOLD = u'/root/robot_data/xiaoyezi/integral_record/'
 else:
     if raw_input('Already sync data?(1:yes, other:no)') == '1':
-        where_am_i = raw_input(u'master, where are you?(1:home,2:workplace,3:aliyun)')
+        where_am_i = raw_input(u'master, where are you?(1:home,2:workplace)')
         if where_am_i == '2':
             ORDER_FILE_PATH = u'E:\\Documents\\robot_data\\xiaoyezi\\integral_record\\order_file.txt'
             GIT_DATA_FOLD =  u'E:\\Documents\\robot_data\\'
@@ -60,17 +60,6 @@ else:
             MEMBER_RECORD_PATH = u'F:\\robot_data\\xiaoyezi\\member_record\\member_record.txt'
             INTEGRAL_GOOD_FOLD = u'F:\\robot_data\\xiaoyezi\\integral_good\\'
             INTEGRAL_RECORD_FOLD = u'F:\\robot_data\\xiaoyezi\\integral_record\\'
-        elif where_am_i == '3':
-            ORDER_FILE_PATH = u'/root/robot_data/xiaoyezi/integral_record/order_file.txt'
-            GIT_DATA_FOLD = u'/root/robot_data/'
-            GIT_CODE_FOLD = u''
-            DATABASE_FOLD = u'/root/robot_data/xiaoyezi/database/'
-            ACTIVITY_FOLD = u'/root/robot_data/xiaoyezi/activity/'
-            TEMPLATE_FOLD = u'/root/robot_data/xiaoyezi/template/'
-            LOG_FOLD = u'/root/robot_data/xiaoyezi/log/'
-            MEMBER_RECORD_PATH = u'/root/robot_data/xiaoyezi/member_record/member_record.txt'
-            INTEGRAL_GOOD_FOLD = u'/root/robot_data/xiaoyezi/integral_good/'
-            INTEGRAL_RECORD_FOLD = u'/root/robot_data/xiaoyezi/integral_record/'
         else:
             print 'place wrong'
             os._exit(0)
