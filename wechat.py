@@ -1,8 +1,8 @@
 #coding:utf-8
 import itchat,time,shelve,re,os,codecs,threading,inspect,ctypes,sys
 import logging
-from shutil import copyfile
 from copy import deepcopy
+from PIL import Image, ImageDraw, ImageFont
 
 reload(sys)
 sys.setdefaultencoding('utf-8')
@@ -136,6 +136,42 @@ def SendMessage(msg, user):
                 return
     finally:
         logging.debug(u'==== 结束')
+
+class PictureException(Exception):
+    def __init__(self, err='图片拼接错误'):
+        Exception.__init__(self, err)
+
+def StitchPictures(images, out_path, mode='V', quality=100):
+    items = images.items()
+    num = len(items)
+    image_files = []
+    for i in range(num):
+        image_ori = Image.open(items[i][0])
+        fnt = ImageFont.truetype('STXINWEI.TTF', 70)
+        d = ImageDraw.Draw(image_ori)
+        d.text((20, 50), items[i][1], font=fnt, fill=(0, 0, 0, 0))
+        image_files.append(image_ori)
+    per_image_size = image_files[0].size
+    if mode == 'H':
+        out_image_size = (per_image_size[0] * num, per_image_size[1])
+    elif mode == 'V':
+        out_image_size = (per_image_size[0], per_image_size[1] * num)
+    else:
+        raise PictureException
+    target = Image.new('RGB', out_image_size)
+    left = 0
+    upper = 0
+    right = per_image_size[0]
+    lower = per_image_size[1]
+    for i in range(num):
+        target.paste(image_files[i], (left, upper, right, lower))
+        if mode == 'H':
+            left += per_image_size[0]
+            right += per_image_size[0]
+        else:
+            upper += per_image_size[1]
+            lower += per_image_size[1]
+    target.save(out_path, quality=quality)
 
 # 数据库对象
 class Database:
@@ -578,40 +614,51 @@ class Template:
             SendMessage('@msg@%s' % u"亲，当前没有进行中的活动", to)
         logging.debug(u'==== 结束')
 
+    def __TemplateSendPicAndText(self, pic_path, text_path, to):
+        logging.debug('==== send stitch picture')
+        SendMessage('@img@%s' % pic_path, to)
+        for line in codecs.open(text_path, 'r', 'utf-8'):
+            line = line.strip()
+            logging.debug('==== send text: ' + line)
+            time.sleep(1)
+            SendMessage('@msg@%s' % line, to)
+
     def TemplateSendIntegralGood(self, to):
         send_picture_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             today = time.strftime('%Y%m%d', time.localtime(time.time()))
-            files = os.listdir(INTEGRAL_GOOD_FOLD)
-            picture_names = []
-            txt_names = []
-            for name in files:
-                if re.match('^.*@.*\.jpg', name):
-                    if name.split('@')[1] >= today:
-                        picture_names.append(name)
-                elif name.endswith('.txt'):
-                    txt_names.append(name)
-            nums = len(picture_names)
-            logging.debug('==== pictures: ' + repr(picture_names))
-            if nums == 0:
-                SendMessage('@msg@%s' % u"亲，当前没有可积分兑换商品", to)
+            pic_path = INTEGRAL_GOOD_FOLD + today + '_stitch.jpg'
+            text_path = INTEGRAL_GOOD_FOLD + today + '_stitch.txt'
+            if os.path.exists(pic_path) and os.path.exists(text_path):
+                self.__TemplateSendPicAndText(pic_path, text_path, to)
                 return
-            SendMessage('@msg@%s' % (u'亲，今天可兑换积分商品有【' + repr(nums) + u'】种哦：'), to)
-            for pic_name in picture_names:
-                pic_head = pic_name[:-4]
-                pic_name_list = pic_head.split('@')
-                copy_pic_name = pic_name_list[0] + '.jpg'
-                integral = int(round(float(pic_name_list[2])*(1-float(pic_name_list[3])/100)*INTEGRAL_GOOD_PROP))
-                taokouling = pic_name_list[4]
-                bianhao = pic_name_list[0]
-                text = u'【商品编号】' + bianhao + u'【所需积分】'+ repr(integral) + u'【淘口令】' + taokouling
-                copyfile(INTEGRAL_GOOD_FOLD + pic_name, INTEGRAL_GOOD_FOLD + copy_pic_name)
-                logging.debug('==== send picture: ' + copy_pic_name)
-                SendMessage('@img@%s' % INTEGRAL_GOOD_FOLD + copy_pic_name, to)
-                time.sleep(1.5)
-                logging.debug('==== send text: ' + text)
-                SendMessage('@msg@%s' % text, to)
+            else:
+                files = os.listdir(INTEGRAL_GOOD_FOLD)
+                picture_names = []
+                for name in files:
+                    if re.match('^.*@.*\.jpg', name):
+                        if name.split('@')[1] >= today:
+                            picture_names.append(name)
+                nums = len(picture_names)
+                if nums == 0:
+                    SendMessage('@msg@%s' % u"亲，当前没有可积分兑换商品", to)
+                    return
+                f = codecs.open(text_path, 'w', 'utf-8')
+                f.write(u'亲，今天可兑换积分商品有【' + str(nums) + u'】种，长图在上面哦，口令如下：\r\n')
+                pictures_path = {}
+                for pic_name in picture_names:
+                    pic_head = pic_name[:-4]
+                    pic_name_list = pic_head.split('@')
+                    integral = int(round(float(pic_name_list[2])*(1-float(pic_name_list[3])/100)*INTEGRAL_GOOD_PROP))
+                    taokouling = pic_name_list[4]
+                    bianhao = pic_name_list[0]
+                    pictures_path[INTEGRAL_GOOD_FOLD + pic_name] = u'编号:%s, 所需积分:%s' % (bianhao, integral)
+                    text = u'【商品编号】' + bianhao + u'【所需积分】'+ repr(integral) + u'【淘口令】' + taokouling + '\r\n'
+                    f.write(text)
+                f.close()
+                StitchPictures(pictures_path, pic_path, quality=10)
+                self.__TemplateSendPicAndText(pic_path, text_path, to)
         finally:
             send_picture_mutex.release()
             logging.debug(u'==== 结束')
@@ -1024,7 +1071,7 @@ def be_add_friend(msg):
     CheckAndSetRemarkName(msg['RecommendInfo']['UserName'])
     SendMessage('@msg@%s' % u'欢迎回到【乐淘家】，祝您每天都有好心情 [害羞]', msg['RecommendInfo']['UserName'])
     # 发送群邀请
-    itchat.add_member_into_chatroom(GetRoomNameByNickName(ROOM_NICK_NAME), msg['RecommendInfo']['UserName'], True)
+    itchat.add_member_into_chatroom(GetRoomNameByNickName(ROOM_NICK_NAME), [{'UserName':msg['RecommendInfo']['UserName']}], True)
     Template().TemplateSendCommand(msg['RecommendInfo']['UserName'])
     logging.debug(u'==== 结束')
     return
@@ -1107,7 +1154,7 @@ def UpdateToGit(is_robot=True, is_data=True):
     else:
         os.system('git commit -m "man update"')
     while True:
-        ret = os.system('git push origin')
+        ret = os.system('git push origin master')
         if ret == 0:
             logging.debug(u'==== GIT上传成功')
             return 0
