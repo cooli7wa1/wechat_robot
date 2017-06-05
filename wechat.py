@@ -646,7 +646,7 @@ class Template:
                     text = u'【商品编号】' + bianhao + u'【所需积分】'+ repr(integral) + u'【淘口令】' + taokouling + '\r\n'
                     f.write(text)
                 f.close()
-                StitchPictures(pictures_path, pic_path, quality=10)
+                StitchPictures(pictures_path, pic_path, quality=20)
                 self.__TemplateSendPicAndText(pic_path, text_path, to)
         finally:
             send_picture_mutex.release()
