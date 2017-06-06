@@ -639,7 +639,7 @@ class Template:
                 for pic_name in picture_names:
                     pic_head = pic_name[:-4]
                     pic_name_list = pic_head.split('@')
-                    integral = int(round(float(pic_name_list[2])*(1-float(pic_name_list[3])/100)*INTEGRAL_GOOD_PROP))
+                    integral = int(round(float(pic_name_list[2])*(1-(float(pic_name_list[3])-5)/100)*INTEGRAL_GOOD_PROP))
                     taokouling = pic_name_list[4]
                     bianhao = pic_name_list[0]
                     pictures_path[INTEGRAL_GOOD_FOLD + pic_name] = u'编号:%s, 所需积分:%s' % (bianhao, integral)
@@ -1339,7 +1339,7 @@ class MyFrame(wx.Frame):
         for name in files:
             if name.startswith(jp_num + '@'):
                 name_list = name.split('@')
-                integral = int(round(float(price) * (1 - float(name_list[3]) / 100) * INTEGRAL_GOOD_PROP))
+                integral = int(round(float(price) * (1 - (float(name_list[3])-5) / 100) * INTEGRAL_GOOD_PROP))
                 c_points = 0 - integral
                 ret = Database().DatabaseChangePoints(remark, c_points)
                 if ret == 0:
