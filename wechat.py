@@ -230,7 +230,7 @@ class Database:
                         father_points = int(round(points/5.0))
                         tmp['points'] += father_points
                         database[father] = tmp
-                        cur_points = self.__DatabaseViewPoints(database, remark_name)
+                        cur_points = self.__DatabaseViewPoints(database, father)
                         IntegralRecord().IntegralRecordAddRecord(father, u'好友奖励积分',  'None', 'None', str(father_points), str(cur_points))
                         # 将积分变更通知给父会员
                         SendMessage('@msg@%s' % (u'亲，您邀请的朋友 ' + itchat.search_friends(remarkName=remark_name)[0]['NickName'] +
