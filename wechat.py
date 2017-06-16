@@ -1,11 +1,17 @@
 #coding:utf-8
-import itchat,time,shelve,re,os,codecs,threading,inspect,ctypes,sys
+import itchat,time,shelve,re,os,codecs,threading,inspect,ctypes,wx
+import wx.grid
 import logging
 from copy import deepcopy
 from PIL import Image, ImageDraw, ImageFont
+from lianmeng import *
+from multiprocessing import Process, Queue
 
+import sys
 reload(sys)
 sys.setdefaultencoding('utf-8')
+
+################ wechat 界面相关 #################
 
 COMMAND_LIST = [u'看活动', u'查积分', u'签到', u'帮助', u'积分玩法', u'积分商品', u'兑换流程']
 SEND_DELAY = 3  # 发送等待，秒
@@ -66,17 +72,18 @@ else:
     else:
         os._exit(0)
 
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s',
-                    datefmt='%a %d %b %Y %H:%M:%S',
-                    filename=LOG_FOLD + 'log_' + time.strftime('%Y-%m-%d_%H%M%S', time.localtime(time.time())) + '.txt',
-                    filemode='w')
+def log_init():
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s',
+                        datefmt='%a %d %b %Y %H:%M:%S',
+                        filename=LOG_FOLD + 'log_' + time.strftime('%Y-%m-%d_%H%M%S', time.localtime(time.time())) + '.txt',
+                        filemode='w')
 
-console = logging.StreamHandler()
-console.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s')
-console.setFormatter(formatter)
-logging.getLogger('').addHandler(console)
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s')
+    console.setFormatter(formatter)
+    logging.getLogger('').addHandler(console)
 
 def _async_raise(tid, exctype):
     """raises the exception, performs cleanup if needed"""
@@ -162,7 +169,6 @@ def StitchPictures(images, out_path, mode='V', quality=100):
             lower += per_image_size[1]
     target.save(out_path, quality=quality)
 
-# 数据库对象
 class Database:
     data_path = DATABASE_FOLD + 'points_database.dat'
     user_data = {}
@@ -555,7 +561,6 @@ class Database:
         database_mutex.release()
         logging.debug(u'==== 更新数据库结束')
 
-# 模板对象
 class Template:
     def TemplateSendCommand(self, to):
         logging.debug(u'==== 开始')
@@ -679,7 +684,6 @@ class Template:
             send_picture_mutex.release()
             logging.debug(u'==== 结束')
 
-# 积分记录
 class IntegralRecord:
     def IntegralRecordAddRecord(self, remark_name, type_message, price, prop, c_points, points):
         logging.debug(u'==== 开始')
@@ -714,7 +718,6 @@ class IntegralRecord:
             integral_record_mutex.release()
             logging.debug(u'==== 结束')
 
-# 邀请记录
 class MemberRecord:
     def MemberRecordAddRecord(self, record):
         member_record_mutex.acquire()
@@ -760,7 +763,6 @@ class MemberRecord:
         finally:
             member_record_mutex.release()
             logging.debug(u'==== 结束')
-
 
 def IsFriend(usr_name):
     ''' 
@@ -1000,14 +1002,11 @@ def single_text_reply(msg):
             ui_thread.name = 'UI thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
             logging.debug('==== thread name is ' + ui_thread.name)
             SendMessage('@msg@%s' % u'UI界面开启结束', msg['FromUserName'])
-        elif msg['Text'] == u'测试1':
+        elif re.match(u'找.*',msg['Text']):
+            keyword = msg['Text'][1:]
             SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            ret = itchat.search_friends(None, '123324237')
-            print ret
-            logging.debug(u'==== search friends return: %s', ret)
-            logging.debug(u'==== search friends return: %s, %s', 'a', 'b')
-            logging.debug(u'==== search friends return: %s, %s' % ('a', 'b'))
-            SendMessage('@msg@%s' % (u'测试结束'), msg['FromUserName'])
+            send_to_browser_worker(keyword.encode('utf-8'))
+            SendMessage('@msg@%s' % (u'找商品结束'), msg['FromUserName'])
 
     logging.debug(u'==== 结束')
     return
@@ -1130,44 +1129,8 @@ def ItchatMessageTextSingle(msg):
         logging.debug('==== thread name is ' + p.name + ' no nick name')
     return
 
-def UpdateToGit(is_robot=True, is_data=True):
-    logging.debug(u'==== GIT开始上传数据')
-    cnt = 0
-    if is_data:
-        os.chdir(GIT_DATA_FOLD)
-    else:
-        os.chdir(GIT_CODE_FOLD)
-    os.system('git add --all')
-    if is_robot:
-        os.system('git commit -m "robot update"')
-    else:
-        os.system('git commit -m "man update"')
-    while True:
-        ret = os.system('git push origin master')
-        if ret == 0:
-            logging.debug(u'==== GIT上传成功')
-            return 0
-        else:
-            cnt += 1
-            logging.error(u'==== 上传失败 error:' + repr(ret) + u' cnt:' + repr(cnt))
-            if cnt >= 3:
-                logging.error(u'==== GIT上传失败')
-                SendMessage('@msg@%s' % u'报告主人：GIT上传失败', (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
-                return -1
+################ UI界面相关 #################
 
-def GitUpdateThread():
-    while True:
-        UpdateToGit()
-        time.sleep(1800)
-
-git_thread = threading.Thread(target=GitUpdateThread)
-git_thread.setDaemon(True)
-git_thread.start()
-git_thread.name = 'GIT thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
-logging.debug('==== thread name is ' + git_thread.name)
-
-import wx
-import wx.grid
 label_ddlr = u"会员名 订单编号 订单价格 佣金比例".split()
 label_jfdh = u"会员名 商品编号 商品价格 订单编号".split()
 label_jljf = u"会员名 奖励积分".split()
@@ -1226,7 +1189,7 @@ class MyTable(wx.grid.PyGridTableBase):
 
 class MyFrame(wx.Frame):
     def __init__(self):
-        wx.Frame.__init__(self, None, -1, "【乐淘家】积分系统")
+        wx.Frame.__init__(self, None, -1, u"【乐淘家】积分系统")
         self.Centre()
         self.ddlr_objs = {}
         self.jfdh_objs = {}
@@ -1407,8 +1370,7 @@ class MyFrame(wx.Frame):
                 logging.info(u'==== 用户删除成功')
             else:
                 logging.info(u'==== 删除用户失败')
-            self.table.UpdateMyData()
-            self.table = MyTable()
+            MyTable().UpdateMyData()
             self.grid.SetTable(self.table, True)
             self.grid.AutoSize()
             self.grid.ForceRefresh()
@@ -1431,8 +1393,7 @@ class MyFrame(wx.Frame):
             SendMessageToRoom(ROOM_NICK_NAME,
                               u'@' + itchat.search_friends(remarkName=remark)[0]['NickName'] +
                               u' 活动奖励积分已录入')
-            self.table.UpdateMyData()
-            self.table = MyTable()
+            MyTable().UpdateMyData()
             self.grid.SetTable(self.table, True)
             self.grid.AutoSize()
             self.grid.ForceRefresh()
@@ -1482,29 +1443,102 @@ class MyFrame(wx.Frame):
         sizer.Add(sizer1, 0, wx.ALL, 10)
         return sizer
 
+################ thread 相关 #################
+
 def UiMainThread():
     app = wx.App(redirect=False)
     MyFrame().Show()
     app.MainLoop()
 
-if not os_system == 'Linux':
-    def ReceiveCmd():
-        while True:
-            cmd = raw_input('Enter cmd(UI):')
-            if cmd == 'UI':
-                ui_thread = threading.Thread(target=UiMainThread)
-                ui_thread.setDaemon(True)
-                ui_thread.start()
-                ui_thread.name = 'UI thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
-                logging.debug('==== thread name is ' + ui_thread.name)
-            else:
-                print 'can not realize cmd'
+def CreateUiThread():
+    ui_thread = threading.Thread(target=UiMainThread)
+    ui_thread.setDaemon(True)
+    ui_thread.start()
+    ui_thread.name = 'UI thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
+    logging.debug('==== thread name is ' + ui_thread.name)
 
-    cmd_thread = threading.Thread(target=ReceiveCmd)
+def ReceiveCmdThread():
+    while True:
+        cmd = raw_input('Enter cmd(UI):')
+        if cmd == 'UI':
+            CreateUiThread()
+        else:
+            print 'can not realize cmd'
+
+def CreateReceiveCmdThread():
+    cmd_thread = threading.Thread(target=ReceiveCmdThread)
     cmd_thread.setDaemon(True)
     cmd_thread.start()
     cmd_thread.name = 'CMD thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
     logging.debug('==== thread name is ' + cmd_thread.name)
+
+def UpdateToGit(is_robot=True, is_data=True):
+    logging.debug(u'==== GIT开始上传数据')
+    cnt = 0
+    if is_data:
+        os.chdir(GIT_DATA_FOLD)
+    else:
+        os.chdir(GIT_CODE_FOLD)
+    os.system('git add --all')
+    if is_robot:
+        os.system('git commit -m "robot update"')
+    else:
+        os.system('git commit -m "man update"')
+    while True:
+        ret = os.system('git push origin master')
+        if ret == 0:
+            logging.debug(u'==== GIT上传成功')
+            return 0
+        else:
+            cnt += 1
+            logging.error(u'==== 上传失败 error:' + repr(ret) + u' cnt:' + repr(cnt))
+            if cnt >= 3:
+                logging.error(u'==== GIT上传失败')
+                SendMessage('@msg@%s' % u'报告主人：GIT上传失败', (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
+                return -1
+
+def GitUpdateThread():
+    while True:
+        UpdateToGit()
+        time.sleep(1800)
+
+def CreateGitThread():
+    git_thread = threading.Thread(target=GitUpdateThread)
+    git_thread.setDaemon(True)
+    git_thread.start()
+    git_thread.name = 'GIT thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
+    logging.debug('==== thread name is ' + git_thread.name)
+
+################ 初始化 #################
+log_init()
+if not os_system == 'Linux':
+    CreateReceiveCmdThread()
+CreateGitThread()
+
+q_w2b_input = Queue(3)
+q_b2w_output = Queue(3)
+q_b2w_input = Queue(3)
+
+def send_to_browser_worker(msg):
+    q_w2b_input.put(msg)
+    ret = q_b2w_output.get()
+    print 'send_to_browser_worker, ret: ' + ret
+
+def browser_master(q_in, q_out):
+    browser_1 = browser()
+    p = Process(target=browser_1.worker, args=(browser_1.q_in, browser_1.q_out))
+    p.daemon = True
+    p.start()
+    while True:
+        msg = q_in.get()
+        browser_1.q_in.put(msg)
+        ret = browser_1.q_out.get()
+        q_out.put(ret)
+        print 'browser_master, ret: ' + ret
+
+p = Process(target=browser_master, name='broser_worker', args=(q_w2b_input, q_b2w_output))
+p.daemon = True
+p.start()
 
 itchat.auto_login()
 itchat.run()
