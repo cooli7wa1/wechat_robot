@@ -24,8 +24,8 @@ member_record_mutex = threading.Lock() # 邀请记录的同步锁
 integral_record_mutex = threading.Lock() # 积分记录的同步锁
 send_picture_mutex = threading.Lock() # 发图片的同步锁，防止一起发太多图片被微信查封
 
-INNER_ROOM_NICK_NAME = u'\u4e50\u6dd8\u5bb6\uff0c\u5185\u90e8\u4fe1\u606f\u7fa4'
-ROOM_NICK_NAME = u'\U0001f49d\u3010\u4e50\u6dd8\u5bb6\u3011\u6dd8\u5929\u732b\u5185\u90e8\u4f18\u60e0\u7cbe\u9009\U0001f49d'
+INNER_ROOM_NICK_NAME = u'乐淘家，内部信息群'
+ROOM_NICK_NAME = u'\U0001f49d【乐淘家】淘天猫内部优惠精选\U0001f49d'
 
 os_f = os.popen('uname')
 os_system = os_f.read().replace('\n','')
@@ -72,18 +72,18 @@ else:
     else:
         os._exit(0)
 
-def log_init():
-    logging.basicConfig(level=logging.DEBUG,
-                        format='%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s',
-                        datefmt='%a %d %b %Y %H:%M:%S',
-                        filename=LOG_FOLD + 'log_' + time.strftime('%Y-%m-%d_%H%M%S', time.localtime(time.time())) + '.txt',
-                        filemode='w')
+# def log_init():
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s',
+                    datefmt='%a %d %b %Y %H:%M:%S',
+                    filename=LOG_FOLD + 'log_' + time.strftime('%Y-%m-%d_%H%M%S', time.localtime(time.time())) + '.txt',
+                    filemode='w')
 
-    console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s')
-    console.setFormatter(formatter)
-    logging.getLogger('').addHandler(console)
+console = logging.StreamHandler()
+console.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s')
+console.setFormatter(formatter)
+logging.getLogger('').addHandler(console)
 
 def _async_raise(tid, exctype):
     """raises the exception, performs cleanup if needed"""
@@ -1370,7 +1370,8 @@ class MyFrame(wx.Frame):
                 logging.info(u'==== 用户删除成功')
             else:
                 logging.info(u'==== 删除用户失败')
-            MyTable().UpdateMyData()
+            self.table.UpdateMyData()
+            self.table = MyTable()
             self.grid.SetTable(self.table, True)
             self.grid.AutoSize()
             self.grid.ForceRefresh()
@@ -1393,7 +1394,8 @@ class MyFrame(wx.Frame):
             SendMessageToRoom(ROOM_NICK_NAME,
                               u'@' + itchat.search_friends(remarkName=remark)[0]['NickName'] +
                               u' 活动奖励积分已录入')
-            MyTable().UpdateMyData()
+            self.table.UpdateMyData()
+            self.table = MyTable()
             self.grid.SetTable(self.table, True)
             self.grid.AutoSize()
             self.grid.ForceRefresh()
@@ -1406,7 +1408,7 @@ class MyFrame(wx.Frame):
         ilabels = self.user_objs.keys()
         if user_data:
             for a in ilabels:
-                self.user_objs[a].SetValue(str(user_data[a]))
+                self.user_objs[a].SetValue(str(user_data[a]).decode('utf-8'))
         else:
             logging.info(u'==== 数据库中没有此用户信息， 输入的会员名不正确')
             for a in ilabels:
@@ -1510,7 +1512,7 @@ def CreateGitThread():
     logging.debug('==== thread name is ' + git_thread.name)
 
 ################ 初始化 #################
-log_init()
+# log_init()
 if not os_system == 'Linux':
     CreateReceiveCmdThread()
 CreateGitThread()
