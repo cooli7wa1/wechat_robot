@@ -4,8 +4,8 @@ import wx.grid
 import logging
 from copy import deepcopy
 from PIL import Image, ImageDraw, ImageFont
-from lianmeng import *
-from multiprocessing import Process, Queue
+# from lianmeng import *
+# from multiprocessing import Process, Queue
 
 import sys
 reload(sys)
@@ -1514,34 +1514,34 @@ def CreateGitThread():
     logging.debug('==== thread name is ' + git_thread.name)
 
 ################ 初始化 #################
-# if not os_system == 'Linux':
-#     CreateReceiveCmdThread()
+if not os_system == 'Linux':
+    CreateReceiveCmdThread()
 CreateGitThread()
 
-q_w2b_input = Queue(3)
-q_b2w_output = Queue(3)
-q_b2w_input = Queue(3)
-
-def send_to_browser_worker(msg):
-    q_w2b_input.put(msg)
-    ret = q_b2w_output.get()
-    print 'send_to_browser_worker, ret: ' + ret
-
-def browser_master(q_in, q_out):
-    browser_1 = browser()
-    p = Process(target=browser_1.worker, args=(browser_1.q_in, browser_1.q_out))
-    p.daemon = True
-    p.start()
-    while True:
-        msg = q_in.get()
-        browser_1.q_in.put(msg)
-        ret = browser_1.q_out.get()
-        q_out.put(ret)
-        print 'browser_master, ret: ' + ret
-
-p = Process(target=browser_master, name='browser_master', args=(q_w2b_input, q_b2w_output))
-p.daemon = True
-p.start()
+# q_w2b_input = Queue(3)
+# q_b2w_output = Queue(3)
+# q_b2w_input = Queue(3)
+#
+# def send_to_browser_worker(msg):
+#     q_w2b_input.put(msg)
+#     ret = q_b2w_output.get()
+#     print 'send_to_browser_worker, ret: ' + ret
+#
+# def browser_master(q_in, q_out):
+#     browser_1 = browser()
+#     p = Process(target=browser_1.worker, args=(browser_1.q_in, browser_1.q_out))
+#     p.daemon = True
+#     p.start()
+#     while True:
+#         msg = q_in.get()
+#         browser_1.q_in.put(msg)
+#         ret = browser_1.q_out.get()
+#         q_out.put(ret)
+#         print 'browser_master, ret: ' + ret
+#
+# p = Process(target=browser_master, name='browser_master', args=(q_w2b_input, q_b2w_output))
+# p.daemon = True
+# p.start()
 
 itchat.auto_login()
 itchat.run()
