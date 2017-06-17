@@ -7,7 +7,7 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException,
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from config import *
+from lianmeng_config import *
 from multiprocessing import Queue
 import sys
 reload(sys)
@@ -21,7 +21,7 @@ class browser:
         self.options.add_argument('headless')
         self.options.add_argument('window-size=1400x900')
         self.browser = webdriver.Chrome(chrome_options=self.options)
-        self.wait = WebDriverWait(browser, 5)
+        self.wait = WebDriverWait(self.browser, 5)
         self.headers = {'User-Agent':'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'}
         self.q_in = Queue()
         self.q_out = Queue()
@@ -112,7 +112,7 @@ class browser:
     def __get_product_from_selection_room(self):
         try:
             print '点击“选取全页商品”'
-            self.browser.find_element_by_class_name('select-all').click()
+            self.wait.until(EC.element_to_be_clickable((By.CLASS_NAME, 'select-all'))).click()
             print '等待数量更新'
             self.wait.until(EC.text_to_be_present_in_element((By.CSS_SELECTOR, '#J_bar_selected > strong'), str(SEARCH_PER_PAGE_SIZE)))
             print '点击“加入选品库”'
@@ -158,7 +158,7 @@ class browser:
                 self.__save_to_mongo(a)
             print '删除excel'
             os.remove(excel_file_path)
-        except (TimeoutException, NoSuchElementException, StaleElementReferenceException), e:
+        except Exception, e:
             print('页面加载有问题，重新加载, %s' % e)
             self.browser.get_screenshot_as_file(time.asctime() + '__get_product_from_selection_room_error.png')
             self.browser.refresh()
@@ -210,7 +210,7 @@ class browser:
         finally:
             session.close()
         
-    def __ali_search(self, keyword, user_name):
+    def ali_search(self, keyword, user_name):
         try:
             print('开始搜索[%s]' % keyword)
             begin_time = time.time()
@@ -225,7 +225,7 @@ class browser:
             # self.browser.get_screenshot_as_file('a.png')
             self.__get_product_from_selection_room()
             end_time = time.time()
-            print 'CostTime : %d' % (end_time-begin_time)
+            print '搜索结束，用时: %d' % (end_time-begin_time)
             return 0
         except TimeoutException:
             try:
@@ -233,25 +233,31 @@ class browser:
                 print '没有找到商品'
                 return -1
             except NoSuchElementException:
-                return self.__ali_search(keyword, user_name)
+                return self.ali_search(keyword, user_name)
 
-    def __init_browser(self):
+    def init_browser(self):
         try:
-            print('开始初始化浏览器')
+            print u'开始初始化浏览器'
             url =  'http://pub.alimama.com/'
             self.browser.get(url)
             self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '#J_menu_login > div'))).click()
             self.__login()
+            print u'初始化成功'
         except Exception, e:
-            print('初始化失败，%s' % e)
-            return self.__init_browser()
+            print u'初始化失败，%s' % e
+            return self.init_browser()
 
-    def worker(self, q_in, q_out):
-        self.__init_browser()
-        while True:
-            keyword, user_name = q_in.get()
-            ret = self.__ali_search(keyword, user_name)
-            if ret == 0:
-                q_out.put('SUCESS')
-            else:
-                q_out.put('FAILED')
+def lianmeng_main(q_wechat_lianmeng, q_lianmeng_wechat):
+    print u'lianmeng_main: 进程开始'
+    print u'lianmeng_main: 开始初始化浏览器'
+    browser_1 = browser()
+    browser_1.init_browser()
+    print u'lianmeng_main: 开始接收来自wechat的命令'
+    while True:
+        keyword, user_name = q_wechat_lianmeng.get()
+        print u'lianmeng_main: 收到命令来自用户【%s】，开始查找【%s】' % (user_name, keyword)
+        ret = browser_1.ali_search(keyword, user_name)
+        if ret == 0:
+            q_lianmeng_wechat.put(('response', 'SUCESS'))
+        else:
+            q_lianmeng_wechat.put(('response', 'FAILED'))

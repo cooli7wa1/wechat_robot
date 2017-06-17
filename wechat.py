@@ -1,91 +1,13 @@
 #coding:utf-8
 import itchat,time,shelve,re,os,codecs,threading,inspect,ctypes,wx
 import wx.grid
-import logging
 from copy import deepcopy
 from PIL import Image, ImageDraw, ImageFont
-# from lianmeng import *
-# from multiprocessing import Process, Queue
-
+from multiprocessing import Process, Queue
+from wechat_config import *
 import sys
 reload(sys)
 sys.setdefaultencoding('utf-8')
-
-################ wechat 界面相关 #################
-
-COMMAND_LIST = [u'看活动', u'查积分', u'签到', u'帮助', u'积分玩法', u'积分商品', u'兑换流程']
-SEND_DELAY = 3  # 发送等待，秒
-SEND_TIMES = 3  # 发送最大次数
-CHECK_IN_POINTS = 10  # 签到奖励的积分
-INTEGRAL_PROP = 10 # 积分 = 商品价格*INTEGRAL_PROP*佣金比例(佣金比例最高录入20%）
-INTEGRAL_GOOD_PROP = 100 # 积分商品所需积分 = 商品实际价格*INTEGRAL_GOOD_PROP*（1-佣金比例）
-database_mutex = threading.Lock() # 数据库的同步锁
-member_record_mutex = threading.Lock() # 邀请记录的同步锁
-integral_record_mutex = threading.Lock() # 积分记录的同步锁
-send_picture_mutex = threading.Lock() # 发图片的同步锁，防止一起发太多图片被微信查封
-
-INNER_ROOM_NICK_NAME = u'乐淘家，内部信息群'
-ROOM_NICK_NAME = u'\U0001f49d【乐淘家】淘天猫内部优惠精选\U0001f49d'
-
-os_f = os.popen('uname')
-os_system = os_f.read().replace('\n','')
-print os_system
-if os_system == 'Linux':
-    ORDER_FILE_PATH = u'/root/robot_data/xiaoyezi/integral_record/order_file.txt'
-    GIT_DATA_FOLD = u'/root/robot_data/'
-    GIT_CODE_FOLD = u'/root/wechat_robot/'
-    DATABASE_FOLD = u'/root/robot_data/xiaoyezi/database/'
-    ACTIVITY_FOLD = u'/root/robot_data/xiaoyezi/activity/'
-    TEMPLATE_FOLD = u'/root/robot_data/xiaoyezi/template/'
-    LOG_FOLD = u'/root/robot_data/xiaoyezi/log/'
-    MEMBER_RECORD_PATH = u'/root/robot_data/xiaoyezi/member_record/member_record.txt'
-    INTEGRAL_GOOD_FOLD = u'/root/robot_data/xiaoyezi/integral_good/'
-    INTEGRAL_RECORD_FOLD = u'/root/robot_data/xiaoyezi/integral_record/'
-else:
-    if raw_input('Already sync data?(1:yes, other:no)') == '1':
-        where_am_i = raw_input(u'master, where are you?(1:home,2:workplace)')
-        if where_am_i == '2':
-            ORDER_FILE_PATH = u'E:\\Documents\\robot_data\\xiaoyezi\\integral_record\\order_file.txt'
-            GIT_DATA_FOLD =  u'E:\\Documents\\robot_data\\'
-            GIT_CODE_FOLD =  u'E:\\Documents\\wechat_robot\\'
-            DATABASE_FOLD = u'E:\\Documents\\robot_data\\xiaoyezi\\database\\'
-            ACTIVITY_FOLD = u'E:\\Documents\\robot_data\\xiaoyezi\\activity\\'
-            TEMPLATE_FOLD = u'E:\\Documents\\robot_data\\xiaoyezi\\template\\'
-            LOG_FOLD = u'E:\\Documents\\robot_data\\xiaoyezi\\log\\'
-            MEMBER_RECORD_PATH = u'E:\\Documents\\robot_data\\xiaoyezi\\member_record\\member_record.txt'
-            INTEGRAL_GOOD_FOLD = u'E:\\Documents\\robot_data\\xiaoyezi\\integral_good\\'
-            INTEGRAL_RECORD_FOLD = u'E:\\Documents\\robot_data\\xiaoyezi\\integral_record\\'
-        elif where_am_i == '1':
-            ORDER_FILE_PATH = u'F:\\robot_data\\xiaoyezi\\integral_record\\order_file.txt'
-            GIT_DATA_FOLD = u'F:\\robot_data\\'
-            GIT_CODE_FOLD = u'E:\\PycharmProjects\\wechat_robot\\'
-            DATABASE_FOLD = u'F:\\robot_data\\xiaoyezi\\database\\'
-            ACTIVITY_FOLD = u'F:\\robot_data\\xiaoyezi\\activity\\'
-            TEMPLATE_FOLD = u'F:\\robot_data\\xiaoyezi\\template\\'
-            LOG_FOLD = u'F:\\robot_data\\xiaoyezi\\log\\'
-            MEMBER_RECORD_PATH = u'F:\\robot_data\\xiaoyezi\\member_record\\member_record.txt'
-            INTEGRAL_GOOD_FOLD = u'F:\\robot_data\\xiaoyezi\\integral_good\\'
-            INTEGRAL_RECORD_FOLD = u'F:\\robot_data\\xiaoyezi\\integral_record\\'
-        else:
-            print 'place wrong'
-            os._exit(0)
-    else:
-        os._exit(0)
-
-def log_init():
-    logging.basicConfig(level=logging.DEBUG,
-                        format='%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s',
-                        datefmt='%a %d %b %Y %H:%M:%S',
-                        filename=LOG_FOLD + 'log_' + time.strftime('%Y-%m-%d_%H%M%S', time.localtime(time.time())) + '.txt',
-                        filemode='w')
-
-    console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s')
-    console.setFormatter(formatter)
-    logging.getLogger('').addHandler(console)
-
-log_init()
 
 def _async_raise(tid, exctype):
     """raises the exception, performs cleanup if needed"""
@@ -174,6 +96,7 @@ def StitchPictures(images, out_path, mode='V', quality=100):
 class Database:
     data_path = DATABASE_FOLD + 'points_database.dat'
     user_data = {}
+    database_mutex = threading.Lock()  # 数据库的同步锁
 
     def __init__(self):
         self.user_data['grade'] = 0
@@ -184,7 +107,7 @@ class Database:
         self.user_data['father'] = ''
 
     def DatabaseGetLabels(self):
-        database_mutex.acquire()
+        Database.database_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             database = shelve.open(self.data_path)
@@ -195,11 +118,11 @@ class Database:
             database.close()
             return labels
         finally:
-            database_mutex.release()
+            Database.database_mutex.release()
             logging.debug(u'==== 结束')
 
     def DatabaseGetAllData(self):
-        database_mutex.acquire()
+        Database.database_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             data = {}
@@ -208,7 +131,7 @@ class Database:
             database.close()
             return data
         finally:
-            database_mutex.release()
+            Database.database_mutex.release()
             logging.debug(u'==== 结束')
 
     def DatabaseChangePoints(self, remark_name, points):
@@ -218,7 +141,7 @@ class Database:
         :param points:
         :return:
         '''
-        database_mutex.acquire()
+        Database.database_mutex.acquire()
         logging.debug(u'==== 开始')
         logging.debug('==== remark_name ' + remark_name)
         try:
@@ -258,7 +181,7 @@ class Database:
                 database.close()
                 return -1
         finally:
-            database_mutex.release()
+            Database.database_mutex.release()
             logging.debug(u'==== 结束')
 
     def DatabaseCheckin(self, remark_name):
@@ -269,7 +192,7 @@ class Database:
                  -2：未找到会员，重要错误，通知主人
         '''
 
-        database_mutex.acquire()
+        Database.database_mutex.acquire()
         logging.debug(u'==== 开始')
         logging.debug('==== remark_name ' + remark_name)
         try:
@@ -318,7 +241,7 @@ class Database:
                 database.close()
                 return -2
         finally:
-            database_mutex.release()
+            Database.database_mutex.release()
             logging.debug(u'==== 结束')
 
     def DatabaseViewPoints(self, remark_name, nick_name):
@@ -328,7 +251,7 @@ class Database:
         :param nick_name:
         :return:
         '''
-        database_mutex.acquire()
+        Database.database_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             database = shelve.open(self.data_path)
@@ -342,7 +265,7 @@ class Database:
             database.close()
             return points
         finally:
-            database_mutex.release()
+            Database.database_mutex.release()
             logging.debug(u'==== 结束')
 
     def __DatabaseViewPoints(self, database, remark_name):
@@ -370,7 +293,7 @@ class Database:
         返回下一个会员编号
         :return:
         '''
-        database_mutex.acquire()
+        Database.database_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             database = shelve.open(self.data_path)
@@ -378,7 +301,7 @@ class Database:
             database.close()
             return next_num
         finally:
-            database_mutex.release()
+            Database.database_mutex.release()
             logging.debug(u'==== 结束')
 
     def DatabaseAddUser(self, remark_name, nick_name, father=''):
@@ -389,7 +312,7 @@ class Database:
         :param father:
         :return:
         '''
-        database_mutex.acquire()
+        Database.database_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             self.user_data['nick_name'] = nick_name
@@ -407,12 +330,12 @@ class Database:
             logging.debug('==== ' + repr(database[remark_name]))
             database.close()
         finally:
-            database_mutex.release()
+            Database.database_mutex.release()
             logging.debug(u'==== 结束')
 
     # 删除用户
     def DatabaseDelUser(self, remark_name):
-        database_mutex.acquire()
+        Database.database_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             database = shelve.open(self.data_path)
@@ -428,7 +351,7 @@ class Database:
                 database.close()
                 return -1
         finally:
-            database_mutex.release()
+            Database.database_mutex.release()
             logging.debug(u'==== 结束')
 
     # TODO
@@ -448,7 +371,7 @@ class Database:
         @param: remark_name 当前会员名
         @return: 父会员名，可能是None
         '''
-        database_mutex.acquire()
+        Database.database_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             father = ''
@@ -463,7 +386,7 @@ class Database:
             database.close()
             return father
         finally:
-            database_mutex.release()
+            Database.database_mutex.release()
             logging.debug(u'==== 结束')
 
     def __DatabaseFindFather(self, database, remark_name):
@@ -485,7 +408,7 @@ class Database:
         @param: ramark_name 会员名
         @return: 会员数据(dict)
         '''
-        database_mutex.acquire()
+        Database.database_mutex.acquire()
         logging.debug(u'==== 开始')
         user_data = {}
         try:
@@ -499,7 +422,7 @@ class Database:
             database.close()
             return user_data
         finally:
-            database_mutex.release()
+            Database.database_mutex.release()
             logging.debug(u'==== 结束')
 
     def DatabaseWriteData(self, remark_name, user_data):
@@ -509,7 +432,7 @@ class Database:
         @param: user_data 会员数据
         @return: 会员数据(dict)
         '''
-        database_mutex.acquire()
+        Database.database_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             need_notify = False
@@ -536,12 +459,12 @@ class Database:
             database.close()
             return
         finally:
-            database_mutex.release()
+            Database.database_mutex.release()
             logging.debug(u'==== 结束')
 
     # 数据库格式更新用
     def DatabaseUpdateDatabase(self):
-        database_mutex.acquire()
+        Database.database_mutex.acquire()
         logging.debug(u'==== 开始更新数据库')
         database = shelve.open(self.data_path)
         for user in database:
@@ -560,10 +483,12 @@ class Database:
                 database[user] = tmp
             print database[user]
         database.close()
-        database_mutex.release()
+        Database.database_mutex.release()
         logging.debug(u'==== 更新数据库结束')
 
 class Template:
+    send_picture_mutex = threading.Lock()  # 发图片的同步锁，防止一起发太多图片被微信查封
+
     def TemplateSendCommand(self, to):
         logging.debug(u'==== 开始')
         lines = ''
@@ -620,7 +545,7 @@ class Template:
             SendMessage('@msg@%s' % line, to)
 
     def TemplateSendIntegralGood(self, to):
-        send_picture_mutex.acquire()
+        Template.send_picture_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             today = time.strftime('%Y%m%d', time.localtime(time.time()))
@@ -656,11 +581,11 @@ class Template:
                 StitchPictures(pictures_path, pic_path, quality=20)
                 self.__TemplateSendPicAndText(pic_path, text_path, to)
         finally:
-            send_picture_mutex.release()
+            Template.send_picture_mutex.release()
             logging.debug(u'==== 结束')
 
     def TemplateSendExchangeProcess(self, to):
-        send_picture_mutex.acquire()
+        Template.send_picture_mutex.acquire()
         logging.debug(u'==== 开始')
         lines = ''
         try:
@@ -683,10 +608,12 @@ class Template:
                 logging.debug('==== send text: ' + lines)
                 SendMessage('@msg@%s' % lines, to)
         finally:
-            send_picture_mutex.release()
+            Template.send_picture_mutex.release()
             logging.debug(u'==== 结束')
 
 class IntegralRecord:
+    integral_record_mutex = threading.Lock()  # 积分记录的同步锁
+
     def IntegralRecordAddRecord(self, remark_name, type_message, price, prop, c_points, points):
         logging.debug(u'==== 开始')
         try:
@@ -697,18 +624,18 @@ class IntegralRecord:
             logging.debug(u'==== 结束')
 
     def IntegralRecordOrderRecord(self, remark_name, order, jp_num=''):
-        integral_record_mutex.acquire()
+        IntegralRecord.integral_record_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             time_now = time.strftime('%Y-%m-%d_%H%M%S', time.localtime(time.time()))
             with codecs.open(ORDER_FILE_PATH, 'a', 'utf-8') as f:
                 f.write('%s %s %s %s\r\n' % (time_now, order, remark_name, jp_num))
         finally:
-            integral_record_mutex.release()
+            IntegralRecord.integral_record_mutex.release()
             logging.debug(u'==== 结束')
 
     def IntegralRecordCheckOrder(self, order):
-        integral_record_mutex.acquire()
+        IntegralRecord.integral_record_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             for line in codecs.open(ORDER_FILE_PATH, 'r', 'utf-8'):
@@ -717,19 +644,21 @@ class IntegralRecord:
                     return -1
             return 0
         finally:
-            integral_record_mutex.release()
+            IntegralRecord.integral_record_mutex.release()
             logging.debug(u'==== 结束')
 
 class MemberRecord:
+    member_record_mutex = threading.Lock()  # 邀请记录的同步锁
+
     def MemberRecordAddRecord(self, record):
-        member_record_mutex.acquire()
+        MemberRecord.member_record_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             time_now = time.strftime('%Y-%m-%d_%H%M%S', time.localtime(time.time()))
             with codecs.open(MEMBER_RECORD_PATH, 'a', 'utf-8') as f:
                 f.write(time_now + ' ' + record)
         finally:
-            member_record_mutex.release()
+            MemberRecord.member_record_mutex.release()
             logging.debug(u'==== 结束')
 
     def MemberRecordFindFather(self, nick_name):
@@ -740,7 +669,7 @@ class MemberRecord:
                  ② -2：找到多个father（昵称同名，或者多次进出群）的情况，且名字不同
                  ③ father: 找到一个father，或者多个father但是名字相同
         '''
-        member_record_mutex.acquire()
+        MemberRecord.member_record_mutex.acquire()
         logging.debug(u'==== 开始')
         logging.debug('==== ' + nick_name)
         try:
@@ -763,7 +692,7 @@ class MemberRecord:
                             (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
                 return -2
         finally:
-            member_record_mutex.release()
+            MemberRecord.member_record_mutex.release()
             logging.debug(u'==== 结束')
 
 def IsFriend(usr_name):
@@ -1007,7 +936,7 @@ def single_text_reply(msg):
         elif re.match(u'找.*',msg['Text']):
             keyword = msg['Text'][1:]
             SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            send_to_browser_worker(keyword.encode('utf-8'))
+            # send_to_browser_worker(keyword.encode('utf-8'))
             SendMessage('@msg@%s' % (u'找商品结束'), msg['FromUserName'])
 
     logging.debug(u'==== 结束')
@@ -1133,15 +1062,6 @@ def ItchatMessageTextSingle(msg):
 
 ################ UI界面相关 #################
 
-label_ddlr = u"会员名 订单编号 订单价格 佣金比例".split()
-label_jfdh = u"会员名 商品编号 商品价格 订单编号".split()
-label_jljf = u"会员名 奖励积分".split()
-
-database_data = Database().DatabaseGetAllData()
-labels = Database().DatabaseGetLabels()
-col_labels = labels[1]
-row_labels = labels[0]
-
 class TextWindow(wx.TextCtrl):
     def __init__(self, parent, id=-1, value="", pos=wx.DefaultPosition, size=(300, 25)):
         wx.TextCtrl.__init__(self, parent, id, value, pos, size)
@@ -1155,24 +1075,28 @@ class StaticWindow(wx.StaticText):
 class MyTable(wx.grid.PyGridTableBase):
     def __init__(self):
         wx.grid.PyGridTableBase.__init__(self)
+        self.database_data = Database().DatabaseGetAllData()
+        self.labels = Database().DatabaseGetLabels()
+        self.col_labels = self.labels[1]
+        self.row_labels = self.labels[0]
 
     def GetNumberRows(self):
-        return len(row_labels)
+        return len(self.row_labels)
 
     def GetNumberCols(self):
-        return len(col_labels)
+        return len(self.col_labels)
 
     def GetColLabelValue(self, col):
-        return col_labels[col]
+        return self.col_labels[col]
 
     def GetRowLabelValue(self, row):
-        return row_labels[row]
+        return self.row_labels[row]
 
     def IsEmptyCell(self,row,col):
         return False
 
     def GetValue(self,row,col):
-        value = database_data[row_labels[row]][col_labels[col]]
+        value = self.database_data[self.row_labels[row]][self.col_labels[col]]
         return value
 
     def SetValue(self,row,col,value):
@@ -1181,13 +1105,13 @@ class MyTable(wx.grid.PyGridTableBase):
     def GetAttr(self,row,col,kind):
         pass
 
-    def UpdateMyData(self):
-        global database_data
-        global labels, col_labels, row_labels
-        database_data = Database().DatabaseGetAllData()
-        labels = Database().DatabaseGetLabels()
-        col_labels = labels[1]
-        row_labels = labels[0]
+    # def UpdateMyData(self):
+    #     global database_data
+    #     global labels, col_labels, row_labels
+    #     database_data = Database().DatabaseGetAllData()
+    #     labels = Database().DatabaseGetLabels()
+    #     col_labels = labels[1]
+    #     row_labels = labels[0]
 
 class MyFrame(wx.Frame):
     def __init__(self):
@@ -1209,9 +1133,10 @@ class MyFrame(wx.Frame):
         mbox.Add(self.panel_r, 0, flag=wx.ALL, border=10)
 
         # panel_l
+        col_labels = Database().DatabaseGetLabels()[1]
         box_l_1 = self.MakeStaticBoxSizer(self.panel_l, u"订单录入", label_ddlr)
         box_l_2 = self.MakeStaticBoxSizer(self.panel_l, u"积分兑换", label_jfdh)
-        box_l_3 = self.MakeStaticBoxSizer(self.panel_l, u"会员明细", col_labels)
+        box_l_3 = self.MakeStaticBoxSizer(self.panel_l, u"会员明细", col_labels, special=True)
         box_1_5 = self.MakeStaticBoxSizer(self.panel_l, u"奖励积分", label_jljf)
         button1 = wx.Button(self.panel_l, -1, u'确认', size=(80,30))
         self.panel_l.Bind(wx.EVT_BUTTON, self.OnButton1Click, button1)
@@ -1283,7 +1208,7 @@ class MyFrame(wx.Frame):
                 IntegralRecord().IntegralRecordOrderRecord(remark, number)
                 SendMessage('@msg@%s' % (u'亲，您的订单【' + number + u'】积分已录入，当前积分为：' + repr(cur_points)),
                             (itchat.search_friends(remarkName=remark)[0]['UserName']))
-                self.table.UpdateMyData()
+                # self.table.UpdateMyData()
                 self.table = MyTable()
                 self.grid.SetTable(self.table, True)
                 self.grid.AutoSize()
@@ -1316,7 +1241,7 @@ class MyFrame(wx.Frame):
                     SendMessageToRoom(ROOM_NICK_NAME,
                                       u'@' + itchat.search_friends(remarkName=remark)[0]['NickName'] +
                                       u' 成功兑换积分商品')
-                    self.table.UpdateMyData()
+                    # self.table.UpdateMyData()
                     self.table = MyTable()
                     self.grid.SetTable(self.table, True)
                     self.grid.AutoSize()
@@ -1331,7 +1256,7 @@ class MyFrame(wx.Frame):
 
     def OnButton4Click(self, event):
         logging.debug(u'==== 开始')
-        self.table.UpdateMyData()
+        # self.table.UpdateMyData()
         self.table = MyTable()
         self.grid.SetTable(self.table, True)
         self.grid.AutoSize()
@@ -1353,7 +1278,7 @@ class MyFrame(wx.Frame):
             else:
                 user_data[a] = tmp.encode('utf-8')
         Database().DatabaseWriteData(remark_name, user_data)
-        self.table.UpdateMyData()
+        # self.table.UpdateMyData()
         self.table = MyTable()
         self.grid.SetTable(self.table, True)
         self.grid.AutoSize()
@@ -1372,7 +1297,7 @@ class MyFrame(wx.Frame):
                 logging.info(u'==== 用户删除成功')
             else:
                 logging.info(u'==== 删除用户失败')
-            self.table.UpdateMyData()
+            # self.table.UpdateMyData()
             self.table = MyTable()
             self.grid.SetTable(self.table, True)
             self.grid.AutoSize()
@@ -1396,7 +1321,7 @@ class MyFrame(wx.Frame):
             SendMessageToRoom(ROOM_NICK_NAME,
                               u'@' + itchat.search_friends(remarkName=remark)[0]['NickName'] +
                               u' 活动奖励积分已录入')
-            self.table.UpdateMyData()
+            # self.table.UpdateMyData()
             self.table = MyTable()
             self.grid.SetTable(self.table, True)
             self.grid.AutoSize()
@@ -1417,12 +1342,12 @@ class MyFrame(wx.Frame):
                 self.user_objs[a].SetValue('')
         logging.debug(u'==== 结束')
 
-    def MakeStaticBoxSizer(self, parent, boxlabel, labels):
+    def MakeStaticBoxSizer(self, parent, boxlabel, labels, special=False):
         box = wx.StaticBox(parent, -1, boxlabel)
         sizer = wx.StaticBoxSizer(box, wx.HORIZONTAL)
         sizer1 = wx.BoxSizer(wx.VERTICAL)
         sizer2 = wx.BoxSizer(wx.VERTICAL)
-        if labels == col_labels:
+        if special:
             bw1 = StaticWindow(parent, label=u'会员名')
             sizer2.Add(bw1, 0, wx.ALL, 2)
             bw = wx.TextCtrl(parent, -1, '', wx.DefaultPosition, (200,25), style=wx.TE_PROCESS_ENTER)
@@ -1437,7 +1362,7 @@ class MyFrame(wx.Frame):
                 self.ddlr_objs[a] = bw
             elif labels == label_jfdh:
                 self.jfdh_objs[a] = bw
-            elif labels == col_labels:
+            elif special:
                 self.user_objs[a] = bw
             elif labels == label_jljf:
                 self.jljf_objs[a] = bw
@@ -1446,8 +1371,6 @@ class MyFrame(wx.Frame):
         sizer.Add(sizer2, 0, wx.ALL, 10)
         sizer.Add(sizer1, 0, wx.ALL, 10)
         return sizer
-
-################ thread 相关 #################
 
 def UiMainThread():
     app = wx.App(redirect=False)
@@ -1460,21 +1383,6 @@ def CreateUiThread():
     ui_thread.start()
     ui_thread.name = 'UI thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
     logging.debug('==== thread name is ' + ui_thread.name)
-
-def ReceiveCmdThread():
-    while True:
-        cmd = raw_input('Enter cmd(UI):')
-        if cmd == 'UI':
-            CreateUiThread()
-        else:
-            print 'can not realize cmd'
-
-def CreateReceiveCmdThread():
-    cmd_thread = threading.Thread(target=ReceiveCmdThread)
-    cmd_thread.setDaemon(True)
-    cmd_thread.start()
-    cmd_thread.name = 'CMD thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
-    logging.debug('==== thread name is ' + cmd_thread.name)
 
 def UpdateToGit(is_robot=True, is_data=True):
     logging.debug(u'==== GIT开始上传数据')
@@ -1513,35 +1421,53 @@ def CreateGitThread():
     git_thread.name = 'GIT thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
     logging.debug('==== thread name is ' + git_thread.name)
 
-################ 初始化 #################
-if not os_system == 'Linux':
-    CreateReceiveCmdThread()
-CreateGitThread()
+def receive_from_main_thread(q_main_wechat,q_wechat_lianmeng):
+    while True:
+        print u'开始接收Main进程命令'
+        type, msg = q_main_wechat.get()
+        print u'收到Main进程命令'
+        if type == 'cmd':
+            if msg == 'UI':
+                print u'开始创建UI线程'
+                CreateUiThread()
+        elif type == 'find':
+            print u'讲需要查找的商品，发送给lianmeng进程'
+            q_wechat_lianmeng.put((msg, 'ltj_1'))
 
-# q_w2b_input = Queue(3)
-# q_b2w_output = Queue(3)
-# q_b2w_input = Queue(3)
-#
-# def send_to_browser_worker(msg):
-#     q_w2b_input.put(msg)
-#     ret = q_b2w_output.get()
-#     print 'send_to_browser_worker, ret: ' + ret
-#
-# def browser_master(q_in, q_out):
-#     browser_1 = browser()
-#     p = Process(target=browser_1.worker, args=(browser_1.q_in, browser_1.q_out))
-#     p.daemon = True
-#     p.start()
-#     while True:
-#         msg = q_in.get()
-#         browser_1.q_in.put(msg)
-#         ret = browser_1.q_out.get()
-#         q_out.put(ret)
-#         print 'browser_master, ret: ' + ret
-#
-# p = Process(target=browser_master, name='browser_master', args=(q_w2b_input, q_b2w_output))
-# p.daemon = True
-# p.start()
+def receive_from_lianmeng_thread(q_lianmeng_wechat):
+    while True:
+        print u'开始接收来自lianmeng进程命令'
+        type, msg = q_lianmeng_wechat.get()
+        print u'收到lianmeng进程命令'
+        if type == 'response':
+            print msg
+        elif type == 'cmd':
+            print 'cmd'
 
-itchat.auto_login()
-itchat.run()
+def create_receive_from_main_thread(q_main_wechat, q_wechat_lianmeng):
+    thread = threading.Thread(target=receive_from_main_thread, args=(q_main_wechat,q_wechat_lianmeng,))
+    thread.setDaemon(True)
+    thread.start()
+    thread.name = 'receive_from_main thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
+    logging.debug('==== thread name is ' + thread.name)
+
+def create_receive_from_lianmeng_thread(q_lianmeng_wechat):
+    thread = threading.Thread(target=receive_from_lianmeng_thread, args=(q_lianmeng_wechat,))
+    thread.setDaemon(True)
+    thread.start()
+    thread.name = 'receive_from_lianmeng thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
+    logging.debug('==== thread name is ' + thread.name)
+
+def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
+    print u'wechat_main: 进程开始'
+    print u'wechat_main: 创建GIT线程'
+    # CreateGitThread()
+    print u'wechat_main: 创建接收main进程命令的线程'
+    create_receive_from_main_thread(q_main_wechat,q_wechat_lianmeng)
+    print u'wechat_main: 创建接收lianmeng进程命令的线程'
+    create_receive_from_lianmeng_thread(q_lianmeng_wechat)
+
+    while True:
+        time.sleep(50)
+    # itchat.auto_login()
+    # itchat.run()
