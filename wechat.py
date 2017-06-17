@@ -1421,51 +1421,75 @@ def CreateGitThread():
     git_thread.name = 'GIT thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
     logging.debug('==== thread name is ' + git_thread.name)
 
-def receive_from_main_thread(q_main_wechat,q_wechat_lianmeng):
-    while True:
-        print u'开始接收Main进程命令'
-        type, msg = q_main_wechat.get()
-        print u'收到Main进程命令'
-        if type == 'cmd':
-            if msg == 'UI':
-                print u'开始创建UI线程'
-                CreateUiThread()
-        elif type == 'find':
-            print u'讲需要查找的商品，发送给lianmeng进程'
-            q_wechat_lianmeng.put((msg, 'ltj_1'))
+class communicate_with_lianmeng:
+    def __init__(self, q_wechat_lianmeng, q_lianmeng_wechat):
+        self.q_out = q_wechat_lianmeng
+        self.q_in = q_lianmeng_wechat
 
-def receive_from_lianmeng_thread(q_lianmeng_wechat):
-    while True:
-        print u'开始接收来自lianmeng进程命令'
-        type, msg = q_lianmeng_wechat.get()
-        print u'收到lianmeng进程命令'
-        if type == 'response':
-            print msg
-        elif type == 'cmd':
-            print 'cmd'
+    def make_package(self, room=u'', user=u'', remark=u'', nick=u'', keyword=u''):
+        d = {'room': room, 'user': user, 'remark': remark, 'nick': nick, 'keyword': keyword}
+        return d
 
-def create_receive_from_main_thread(q_main_wechat, q_wechat_lianmeng):
-    thread = threading.Thread(target=receive_from_main_thread, args=(q_main_wechat,q_wechat_lianmeng,))
-    thread.setDaemon(True)
-    thread.start()
-    thread.name = 'receive_from_main thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
-    logging.debug('==== thread name is ' + thread.name)
+    def send_msg_to_lianmeng(self, package):
+        self.q_out.put(('find', package))
 
-def create_receive_from_lianmeng_thread(q_lianmeng_wechat):
-    thread = threading.Thread(target=receive_from_lianmeng_thread, args=(q_lianmeng_wechat,))
-    thread.setDaemon(True)
-    thread.start()
-    thread.name = 'receive_from_lianmeng thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
-    logging.debug('==== thread name is ' + thread.name)
+    def send_goods_to_user(self, package):
+        pass
+
+    def receive_from_lianmeng_thread(self):
+        while True:
+            print u'开始接收来自lianmeng进程命令'
+            type, msg = self.q_in.get()
+            print u'收到lianmeng进程命令'
+            if type == 'response':
+                print msg
+            elif type == 'cmd':
+                print 'cmd'
+
+    def create_receive_from_lianmeng_thread(self):
+        thread = threading.Thread(target=self.receive_from_lianmeng_thread,)
+        thread.setDaemon(True)
+        thread.start()
+        thread.name = 'receive_from_lianmeng thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
+        logging.debug('==== thread name is ' + thread.name)
+
+class communicate_with_main:
+    def __init__(self, q_wechat_main, q_main_wechat, q_wechat_lianmeng):
+        self.q_main_out = q_wechat_main
+        self.q_main_in = q_main_wechat
+        self.q_lianmeng_out = q_wechat_lianmeng
+
+    def create_receive_from_main_thread(self):
+        thread = threading.Thread(target=self.receive_from_main_thread,)
+        thread.setDaemon(True)
+        thread.start()
+        thread.name = 'receive_from_main thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
+        logging.debug('==== thread name is ' + thread.name)
+
+    def receive_from_main_thread(self):
+        while True:
+            print u'开始接收Main进程命令'
+            type, msg = self.q_main_in.get()
+            print u'收到Main进程命令'
+            if type == 'cmd':
+                if msg == 'UI':
+                    print u'开始创建UI线程'
+                    CreateUiThread()
+            # elif type == 'find':
+            #     print u'将需要查找的商品，发送给lianmeng进程'
+            #     self.q_lianmeng_out.put(('find', msg))
+
 
 def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     print u'wechat_main: 进程开始'
     print u'wechat_main: 创建GIT线程'
     # CreateGitThread()
     print u'wechat_main: 创建接收main进程命令的线程'
-    create_receive_from_main_thread(q_main_wechat,q_wechat_lianmeng)
+    com_main = communicate_with_main(q_wechat_main, q_main_wechat, q_wechat_lianmeng)
+    com_main.create_receive_from_main_thread()
     print u'wechat_main: 创建接收lianmeng进程命令的线程'
-    create_receive_from_lianmeng_thread(q_lianmeng_wechat)
+    com_lm = communicate_with_lianmeng(q_wechat_lianmeng, q_lianmeng_wechat)
+    com_lm.create_receive_from_lianmeng_thread()
 
     while True:
         time.sleep(50)

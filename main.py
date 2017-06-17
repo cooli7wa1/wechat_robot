@@ -6,6 +6,10 @@ from wechat import wechat_main
 from lianmeng import lianmeng_main
 from multiprocessing import Queue, Process
 
+def make_package(room=u'', user=u'', remark=u'', nick=u'', keyword=u''):
+    d = {'room':room, 'user':user, 'remark':remark, 'nick':nick, 'keyword':keyword}
+    return d
+
 if __name__ == '__main__':
     q_main_wechat = Queue(3)
     q_wechat_main = Queue(3)
@@ -20,17 +24,20 @@ if __name__ == '__main__':
     p_lianmeng.daemon = True
     p_lianmeng.start()
 
-    # while True:
-    #     msg = raw_input('enter cmd: ')
-    #     if msg == 'UI':
-    #         print u'输入了UI命令，将命令发送到wechat进程'
-    #         q_main_wechat.put(('cmd', 'UI'))
-    #     elif re.match(u'找.*', msg):
-    #         print msg
-    #         q_wechat_lianmeng.put(('find', msg))
-    #     else:
-    #         pass
-    for i in '哈衣 隔尿垫 纸尿裤 口水巾 情趣内衣'.split(' '):
-        q_wechat_lianmeng.put((i, 'ltj_1'))
     while True:
-        time.sleep(10)
+        msg = raw_input('enter cmd: ').decode('utf-8')
+        if msg == 'UI':
+            print u'输入了UI命令，将命令发送到wechat进程'
+            q_main_wechat.put(('cmd', msg))
+        elif re.match(u'找.*', msg):
+            print u'输入了找..命令，将命令发送到lianmeng进程'
+            find_package = make_package(room=u'default', user=u'123456', remark=u'ltj_1', nick=u'Rickey', keyword=msg[1:])
+            q_wechat_lianmeng.put(('find', find_package))
+        else:
+            pass
+
+    # for i in u'哈衣 隔尿垫 纸尿裤 口水巾 婴儿纸巾'.split(' '):
+    #     find_package = make_package(room=u'default', user=u'123456', remark=u'ltj_1', nick=u'Rickey', keyword=i)
+    #     q_wechat_lianmeng.put(('find', find_package))
+    # while True:
+    #     time.sleep(10)
