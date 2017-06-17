@@ -72,18 +72,20 @@ else:
     else:
         os._exit(0)
 
-# def log_init():
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s',
-                    datefmt='%a %d %b %Y %H:%M:%S',
-                    filename=LOG_FOLD + 'log_' + time.strftime('%Y-%m-%d_%H%M%S', time.localtime(time.time())) + '.txt',
-                    filemode='w')
+def log_init():
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s',
+                        datefmt='%a %d %b %Y %H:%M:%S',
+                        filename=LOG_FOLD + 'log_' + time.strftime('%Y-%m-%d_%H%M%S', time.localtime(time.time())) + '.txt',
+                        filemode='w')
 
-console = logging.StreamHandler()
-console.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s')
-console.setFormatter(formatter)
-logging.getLogger('').addHandler(console)
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s')
+    console.setFormatter(formatter)
+    logging.getLogger('').addHandler(console)
+
+log_init()
 
 def _async_raise(tid, exctype):
     """raises the exception, performs cleanup if needed"""
@@ -134,7 +136,7 @@ def SendMessage(msg, user):
         logging.debug(u'==== 结束')
 
 class PictureException(Exception):
-    def __init__(self, err='图片拼接错误'):
+    def __init__(self, err=u'图片拼接错误'):
         Exception.__init__(self, err)
 
 def StitchPictures(images, out_path, mode='V', quality=100):
@@ -1512,9 +1514,8 @@ def CreateGitThread():
     logging.debug('==== thread name is ' + git_thread.name)
 
 ################ 初始化 #################
-# log_init()
-if not os_system == 'Linux':
-    CreateReceiveCmdThread()
+# if not os_system == 'Linux':
+#     CreateReceiveCmdThread()
 CreateGitThread()
 
 q_w2b_input = Queue(3)
@@ -1538,7 +1539,7 @@ def browser_master(q_in, q_out):
         q_out.put(ret)
         print 'browser_master, ret: ' + ret
 
-p = Process(target=browser_master, name='broser_worker', args=(q_w2b_input, q_b2w_output))
+p = Process(target=browser_master, name='browser_master', args=(q_w2b_input, q_b2w_output))
 p.daemon = True
 p.start()
 
