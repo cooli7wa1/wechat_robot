@@ -1,5 +1,6 @@
 #coding:utf-8
 import os, logging, time
+from common_config import *
 
 os_f = os.popen('uname')
 os_system = os_f.read().replace('\n','')
@@ -53,6 +54,7 @@ INTEGRAL_PROP = 10  # 积分 = 商品价格*INTEGRAL_PROP*佣金比例(佣金比
 INTEGRAL_GOOD_PROP = 100  # 积分商品所需积分 = 商品实际价格*INTEGRAL_GOOD_PROP*（1-佣金比例）
 INNER_ROOM_NICK_NAME = u'乐淘家，内部信息群'
 ROOM_NICK_NAME = u'\U0001f49d【乐淘家】淘天猫内部优惠精选\U0001f49d'
+GOODS_PER_TIME = 3
 
 label_ddlr = u"会员名 订单编号 订单价格 佣金比例".split()
 label_jfdh = u"会员名 商品编号 商品价格 订单编号".split()

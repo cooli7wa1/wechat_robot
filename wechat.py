@@ -1,5 +1,8 @@
 #coding:utf-8
+import random
+
 import itchat,time,shelve,re,os,codecs,threading,inspect,ctypes,wx
+import pymongo
 import wx.grid
 from copy import deepcopy
 from PIL import Image, ImageDraw, ImageFont
@@ -1021,6 +1024,55 @@ def SendMessageToRoom(nick_name, msg):
     logging.debug(u'==== 结束')
     return
 
+def make_text(dict):
+    name = dict[u'商品名称']
+    price = eval(dict[u'商品价格(单位：元)'])
+    youhuiyuan = eval(re.search(r'(\d+)',dict[u'优惠券面额']).group(1)) # 如果没有优惠券是'无'，这里返回''
+    if youhuiyuan:
+        kouling = dict[u'优惠券淘口令(30天内有效)']
+    else:
+        kouling = dict[u'淘口令(30天内有效)']
+    prop = eval(dict[u'收入比率(%)'])
+    jifen = int(round(price*10*prop/100.0))
+    text = u'%s\n【在售价】%d【卷后价】%d【积分】%d\n【领卷下单】%s\n复制这条信息,打开【手机淘宝】即可下单' % \
+           (name, price, price-youhuiyuan, jifen, kouling)
+    return text
+
+def SendGoodsToUser(room_name, user_name, nick_name, first_time=True):
+    # 制作长图和文案
+    cur_time = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
+    pictures = {}
+    db_table = pymongo.MongoClient(MONGO_URL, connect=False)[MONGO_DB][MONGO_TABLE]
+    cursor = db_table.find({'user': user_name})
+    goods = cursor.next()['goods']
+    cursor = goods['cursor'] # 当前发送过的最后一个商品
+    goods_detail = goods['goods_detail']
+    num = len(goods_detail)
+    range_end = cursor + GOODS_PER_TIME
+    if range_end > num:
+        range_end = num
+    for i in range(cursor, range_end):
+        pictures[goods_detail[str(i)][u'主图存储路径']] = u'商品序号:%d' % i
+    out_long_pic_path = u'pictures\\%s.jpg' % (user_name + '_longpic_' + cur_time + '_' + str(random.randint(1,1000)))
+    StitchPictures(pictures, out_long_pic_path, quality=30)
+    # 将长图路径更新到数据库
+    db_table.update_one({'user': user_name}, {"$set": {'goods.long_pic.%s' % cur_time: out_long_pic_path}})
+    # 发送文案和长图
+    to_name = room_name
+    itchat.update_friend(user_name)
+    if itchat.search_friends(None, user_name):
+        to_name = user_name
+    if first_time:
+        if to_name == room_name:
+            SendMessage('@msg@%s' % (u'@%s 找到【%d】个商品，发送第%d页:') % (nick_name, num, ((cursor+1)/GOODS_PER_TIME)+1), to_name)
+    SendMessage('@img@%s' % out_long_pic_path, to_name)
+    for i in range(cursor, range_end):
+        SendMessage('@msg@%s' % ((u'商品序号:%d\n' % i) + make_text(goods_detail[i])), to_name)
+    # 发送成功之后，更新cursor
+    for i in range(cursor, range_end):
+        print (u'商品序号:%d\n' % i) + make_text(goods_detail[i])
+    db_table.update_one({'user': user_name}, {"$set": {'goods.cursor': range_end-1}})
+
 @itchat.msg_register(itchat.content.FRIENDS)
 def ItchatMessageFriend(msg):
     p = threading.Thread(target=be_add_friend, args=(msg,))
@@ -1422,10 +1474,8 @@ def CreateGitThread():
     logging.debug('==== thread name is ' + git_thread.name)
 
 class communicate_with_lianmeng:
-    def __init__(self, q_wechat_lianmeng, q_lianmeng_wechat):
-        self.q_out = q_wechat_lianmeng
-        self.q_in = q_lianmeng_wechat
-
+    q_out = None
+    q_in = None
     def make_package(self, room=u'', user=u'', remark=u'', nick=u'', keyword=u''):
         d = {'room': room, 'user': user, 'remark': remark, 'nick': nick, 'keyword': keyword}
         return d
@@ -1434,7 +1484,11 @@ class communicate_with_lianmeng:
         self.q_out.put(('find', package))
 
     def send_goods_to_user(self, package):
-        pass
+        p = threading.Thread(target=SendGoodsToUser, args=(package['room'], package['user'], package['nick']))
+        p.name = 'SendGoodsToUser, %s, %s' % (time.strftime('%d_%H%M%S', time.localtime(time.time())), package['nick'])
+        p.setDaemon(True)
+        p.start()
+        logging.debug('==== thread name is ' + p.name)
 
     def receive_from_lianmeng_thread(self):
         while True:
@@ -1442,7 +1496,7 @@ class communicate_with_lianmeng:
             type, msg = self.q_in.get()
             print u'收到lianmeng进程命令'
             if type == 'response':
-                print msg
+                self.send_goods_to_user(msg)
             elif type == 'cmd':
                 print 'cmd'
 
@@ -1454,11 +1508,8 @@ class communicate_with_lianmeng:
         logging.debug('==== thread name is ' + thread.name)
 
 class communicate_with_main:
-    def __init__(self, q_wechat_main, q_main_wechat, q_wechat_lianmeng):
-        self.q_main_out = q_wechat_main
-        self.q_main_in = q_main_wechat
-        self.q_lianmeng_out = q_wechat_lianmeng
-
+    q_out = None
+    q_in = None
     def create_receive_from_main_thread(self):
         thread = threading.Thread(target=self.receive_from_main_thread,)
         thread.setDaemon(True)
@@ -1469,27 +1520,28 @@ class communicate_with_main:
     def receive_from_main_thread(self):
         while True:
             print u'开始接收Main进程命令'
-            type, msg = self.q_main_in.get()
+            type, msg = self.q_in.get()
             print u'收到Main进程命令'
             if type == 'cmd':
                 if msg == 'UI':
                     print u'开始创建UI线程'
                     CreateUiThread()
-            # elif type == 'find':
-            #     print u'将需要查找的商品，发送给lianmeng进程'
-            #     self.q_lianmeng_out.put(('find', msg))
-
+                if msg == u'下一个':
+                    print u'WeChat，收到，下一个命令'
+                    communicate_with_lianmeng().send_goods_to_user({'room':'default', 'user':'123456', 'nick':'Rickey'})
 
 def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     print u'wechat_main: 进程开始'
     print u'wechat_main: 创建GIT线程'
     # CreateGitThread()
     print u'wechat_main: 创建接收main进程命令的线程'
-    com_main = communicate_with_main(q_wechat_main, q_main_wechat, q_wechat_lianmeng)
-    com_main.create_receive_from_main_thread()
+    communicate_with_main.q_out = q_wechat_main
+    communicate_with_main.q_in = q_main_wechat
+    communicate_with_main().create_receive_from_main_thread()
     print u'wechat_main: 创建接收lianmeng进程命令的线程'
-    com_lm = communicate_with_lianmeng(q_wechat_lianmeng, q_lianmeng_wechat)
-    com_lm.create_receive_from_lianmeng_thread()
+    communicate_with_lianmeng.q_out = q_wechat_lianmeng
+    communicate_with_lianmeng.q_in = q_lianmeng_wechat
+    communicate_with_lianmeng().create_receive_from_lianmeng_thread()
 
     while True:
         time.sleep(50)

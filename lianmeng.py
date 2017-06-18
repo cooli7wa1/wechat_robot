@@ -1,5 +1,6 @@
 #coding:utf-8
 import os, platform, requests, time, pymongo, xlrd, subprocess
+import random
 from hashlib import md5
 from requests import RequestException
 from selenium import webdriver
@@ -17,8 +18,9 @@ class browser:
     def __init__(self):
         self.client = pymongo.MongoClient(MONGO_URL, connect=False)
         self.db_table = self.client[MONGO_DB][MONGO_TABLE]
+        self.db_table_search = self.client[MONGO_DB][MONGO_TABLE_SEARCH]
         self.options = webdriver.ChromeOptions()
-        # self.options.add_argument('headless')
+        self.options.add_argument('headless')
         self.options.add_argument('window-size=1400x900')
         self.browser = webdriver.Chrome(chrome_options=self.options)
         self.wait = WebDriverWait(self.browser, 5)
@@ -149,15 +151,15 @@ class browser:
             data = xlrd.open_workbook(excel_file_path)
             table = data.sheets()[0]
             title = table.row_values(0)
-            goods = {}
+            goods_detail = {}
             for i in range(1, table.nrows):
                 product = table.row_values(i)
                 good = dict(zip(title, product))
                 print '下载图片'
                 path = self.__download_main_pic(good[u'商品主图'] + DOWNLOAD_IMG_SIZE)
                 good['主图存储路径'] = path
-                goods[str(i)] = good
-            self.__save_to_mongo(goods)
+                goods_detail[str(i-1)] = good
+            self.__save_to_mongo(goods_detail)
             print '删除excel'
             os.remove(excel_file_path)
         except Exception, e:
@@ -165,24 +167,41 @@ class browser:
             self.browser.get_screenshot_as_file(time.asctime() + '__get_product_from_selection_room_error.png')
             self.browser.refresh()
             return self.__get_product_from_selection_room()
-    
-    def __save_to_mongo(self, goods):
+
+    def __record_search_history(self):
         try:
-            cur_time = time.strftime('_%Y%m%d%H%M%S', time.localtime(time.time()))
-            goods_name = 'goods' + cur_time
+            cur_time = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
+            cursor = self.db_table_search.find({'user': self.package['user']})
+            if cursor.count() == 1:
+                self.db_table_search.update_one({'user': self.package['user']},
+                                         {"$set": {cur_time: self.package['keyword']}})
+            elif cursor.count() == 0:
+                new = {'user': self.package['user'],
+                       cur_time: self.package['keyword']}
+                self.db_table_search.insert(new)
+            print('存储到MONGODB HISTORY成功')
+            return 0
+        except Exception, e:
+            print('存储到MONGODB HISTORY失败, %s' % e)
+            return -1
+
+    def __save_to_mongo(self, goods_detail):
+        try:
+            goods = {}
+            cur_time = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
+            goods['search_time'] = cur_time
+            goods['cursor'] = 0
+            goods['goods_detail'] = goods_detail
             cursor = self.db_table.find({'user': self.package['user']})
             if cursor.count() == 1:
                 self.db_table.update_one({'user': self.package['user']},
-                                         {"$set": {'cursor.cur_goods': goods_name,
-                                                   'cursor.cur_num': 0,
-                                                   'nick': self.package['nick'],
-                                                   goods_name: goods}})
+                                         {"$set": {'nick': self.package['nick'],
+                                                   'goods': goods}})
             elif cursor.count() == 0:
                 new = {'user':self.package['user'],
                        'remark':self.package['remark'],
                        'nick':self.package['nick'],
-                       'cursor':{'cur_goods':goods_name, 'cur_num':0},
-                       goods_name:goods}
+                       'goods':goods}
                 self.db_table.insert(new)
             else:
                 print u'错误，MONGGODB找到多个用户，%s' % self.package['user']
@@ -214,7 +233,9 @@ class browser:
         try:
             response = session.get(url, headers=self.headers)
             if response.status_code == 200:
-                path = PICTURES_FOLD_PATH + '{0}.{1}'.format(md5(response.content).hexdigest(), 'jpg')
+                cur_time = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
+                path = PICTURES_FOLD_PATH + '{0}.{1}'.format(self.package['user'] + '_' + cur_time + '_'
+                                                             + str(random.randint(1,1000)), 'jpg')
                 if not os.path.exists(path):
                     with open(path, 'wb') as f:
                         f.write(response.content)
@@ -236,6 +257,7 @@ class browser:
         try:
             print('开始搜索[%s]' % keyword)
             begin_time = time.time()
+            self.__record_search_history()
             url = 'http://pub.alimama.com/promo/search/index.htm?q=' + keyword.encode('utf-8').replace(r'\x', '%') + \
                   '&toPage=' + str(SEARCH_PAGE) + '&dpyhq=' + str(SEARCH_DPYHJ) + '&perPageSize=' + str(SEARCH_PER_PAGE_SIZE) + \
                   '&freeShipment=' + str(SEARCH_FREE_SHIPMENT) + '&startTkRate=' + str(SEARCH_START_TK_RATE) + '&queryType=' + \
@@ -269,9 +291,11 @@ class browser:
             print u'初始化失败，%s' % e
             return self.init_browser()
 
-def make_package(room=u'', user=u'', result=u''):
-    d = {'room':room, 'user':user, 'result':result}
+def make_package(room=u'', user=u'', nick=u'', result=u''):
+    d = {'room':room, 'user':user, 'nick':nick, 'result':result}
     return d
+
+
 
 def lianmeng_main(q_wechat_lianmeng, q_lianmeng_wechat):
     print u'lianmeng_main: 进程开始'
@@ -285,7 +309,7 @@ def lianmeng_main(q_wechat_lianmeng, q_lianmeng_wechat):
             browser_1.package = msg
             print u'lianmeng_main: 收到命令来自用户【%s】，开始查找【%s】' % (msg['nick'], msg['keyword'])
             result = u'SUCESS' if browser_1.ali_search(msg['keyword']) == 0 else u'FAILED'
-            response_package = make_package(room=msg['room'], user=msg['user'], result=result)
+            response_package = make_package(room=msg['room'], user=msg['user'], nick=msg['nick'], result=result)
             q_lianmeng_wechat.put(('response', response_package))
         elif type == 'cmd':
             print u'lianmeng_main: 收到cmd'

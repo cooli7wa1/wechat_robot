@@ -1,11 +1,9 @@
 #coding:utf-8
-MONGO_URL = 'localhost'
-MONGO_DB = 'lianmeng'
-MONGO_TABLE = 'lianmeng'
+from common_config import *
+
 SERVICE_ARGS = ['--load-images=false', '--disk-cache=true', '--output-encoding=utf8', '--script-encoding=utf8']
 DOWNLOAD_IMG_SIZE = '_400x400'
 CODE_IMAGE_PATH = 'codeimage.jpg'
-PICTURES_FOLD_PATH = 'pictures\\'
 EXCEL_FOLD_PATH = 'excels\\'
 
 # 查找商品相关设定

@@ -33,6 +33,9 @@ if __name__ == '__main__':
             print u'输入了找..命令，将命令发送到lianmeng进程'
             find_package = make_package(room=u'default', user=u'123456', remark=u'ltj_1', nick=u'Rickey', keyword=msg[1:])
             q_wechat_lianmeng.put(('find', find_package))
+        elif msg == u'下一个':
+            print u'输入了，下一个，将命令发送到wechat进程'
+            q_main_wechat.put(('cmd', msg))
         else:
             pass
 
