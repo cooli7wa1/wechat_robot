@@ -60,27 +60,23 @@ def SendMessage(msg, user):
     finally:
         logging.debug(u'==== 结束')
 
-class PictureException(Exception):
-    def __init__(self, err=u'图片拼接错误'):
-        Exception.__init__(self, err)
-
 def StitchPictures(images, out_path, mode='V', quality=100):
     items = images.items()
     num = len(items)
     image_files = []
+    per_image_size = Image.open(items[0][0]).size
     for i in range(num):
         image_ori = Image.open(items[i][0])
         fnt = ImageFont.truetype('STXINWEI.TTF', 70)
         d = ImageDraw.Draw(image_ori)
         d.text((20, 50), items[i][1], font=fnt, fill=(0, 0, 0, 0))
+        if image_ori.size != per_image_size:
+            image_ori = image_ori.resize(per_image_size, Image.LANCZOS)
         image_files.append(image_ori)
-    per_image_size = image_files[0].size
     if mode == 'H':
         out_image_size = (per_image_size[0] * num, per_image_size[1])
     elif mode == 'V':
         out_image_size = (per_image_size[0], per_image_size[1] * num)
-    else:
-        raise PictureException
     target = Image.new('RGB', out_image_size)
     left = 0
     upper = 0
@@ -548,7 +544,6 @@ class Template:
             SendMessage('@msg@%s' % line, to)
 
     def TemplateSendIntegralGood(self, to):
-        Template.send_picture_mutex.acquire()
         logging.debug(u'==== 开始')
         try:
             today = time.strftime('%Y%m%d', time.localtime(time.time()))
@@ -584,11 +579,9 @@ class Template:
                 StitchPictures(pictures_path, pic_path, quality=20)
                 self.__TemplateSendPicAndText(pic_path, text_path, to)
         finally:
-            Template.send_picture_mutex.release()
             logging.debug(u'==== 结束')
 
     def TemplateSendExchangeProcess(self, to):
-        Template.send_picture_mutex.acquire()
         logging.debug(u'==== 开始')
         lines = ''
         try:
@@ -611,7 +604,6 @@ class Template:
                 logging.debug('==== send text: ' + lines)
                 SendMessage('@msg@%s' % lines, to)
         finally:
-            Template.send_picture_mutex.release()
             logging.debug(u'==== 结束')
 
 class IntegralRecord:
@@ -964,6 +956,19 @@ def group_text_reply(msg):
         else:
             logging.debug('==== nick_name is ' + (itchat.search_friends(None, msg['ActualUserName']))['NickName'])
             text_command_router(msg, 'ActualUserName')
+    elif re.match(u'找 .*', msg['Text']):
+        key_word = msg['Text'][2:]
+        logging.debug(u'==== 收到查找商品命令: %s' % msg['Text'])
+        SendMessage('@msg@%s' % (u'@%s 正在为您查找商品【%s】，请稍等...' % (msg['ActualNickName'], key_word)), msg['FromUserName'])
+        friend = itchat.search_friends(None, msg['ActualUserName'])
+        remark_name = ''
+        if friend:
+            remark_name = friend['RemarkName']
+        package = communicate_with_lianmeng().make_package(room=msg['FromUserName'], user=msg['ActualUserName'], remark=remark_name, nick=msg['ActualNickName'], keyword=key_word)
+        communicate_with_lianmeng().send_msg_to_lianmeng('find', package)
+    elif msg['Text'] == u'下一页':
+        logging.debug(u'==== 收到命令，下一页')
+        communicate_with_lianmeng().send_goods_to_user({'room': msg['FromUserName'], 'user': msg['ActualUserName'], 'nick': msg['ActualNickName']})
     logging.debug(u'==== 结束')
     return
 
@@ -1027,51 +1032,62 @@ def SendMessageToRoom(nick_name, msg):
 def make_text(dict):
     name = dict[u'商品名称']
     price = eval(dict[u'商品价格(单位：元)'])
-    youhuiyuan = eval(re.search(r'(\d+)',dict[u'优惠券面额']).group(1)) # 如果没有优惠券是'无'，这里返回''
+    youhuiyuan_msg = dict[u'优惠券面额']
+    if re.search(u'满(\d+)元减(\d+)元', youhuiyuan_msg):
+        youhuiyuan = eval(re.search(u'满(\d+)元减(\d+)元', youhuiyuan_msg).group(2))
+    elif re.search(u'(\d+)元无条件券', youhuiyuan_msg):
+        youhuiyuan = eval(re.search(u'(\d+)元无条件券', youhuiyuan_msg).group(1))
+    else:
+        youhuiyuan = 0
     if youhuiyuan:
         kouling = dict[u'优惠券淘口令(30天内有效)']
     else:
         kouling = dict[u'淘口令(30天内有效)']
     prop = eval(dict[u'收入比率(%)'])
     jifen = int(round(price*10*prop/100.0))
-    text = u'%s\n【在售价】%d【卷后价】%d【积分】%d\n【领卷下单】%s\n复制这条信息,打开【手机淘宝】即可下单' % \
-           (name, price, price-youhuiyuan, jifen, kouling)
+    if youhuiyuan:
+        text = u'%s\n【优惠券】%d【卷后价】%d【积分】%d\n%s,复制这条信息,打开【手机淘宝】即可下单' % \
+           (name, youhuiyuan, price-youhuiyuan, jifen, kouling)
+    else:
+        text = u'%s\n【售价】%d【积分】%d\n%s,复制这条信息,打开【手机淘宝】即可下单' % \
+           (name, price, jifen, kouling)
     return text
 
-def SendGoodsToUser(room_name, user_name, nick_name, first_time=True):
+def SendGoodsToUser(room_name, user_name, nick_name):
     # 制作长图和文案
     cur_time = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
-    pictures = {}
     db_table = pymongo.MongoClient(MONGO_URL, connect=False)[MONGO_DB][MONGO_TABLE]
-    cursor = db_table.find({'user': user_name})
-    goods = cursor.next()['goods']
-    cursor = goods['cursor'] # 当前发送过的最后一个商品
+    table_cursor = db_table.find({'user': user_name})
+    goods = table_cursor.next()['goods']
     goods_detail = goods['goods_detail']
+    cursor = goods['cursor'] # 下一个要发送的商品
     num = len(goods_detail)
+    if cursor >= num:
+        SendMessage('@msg@%s' % ((u'@%s 没有其他商品了') % nick_name), room_name)
+        return
     range_end = cursor + GOODS_PER_TIME
     if range_end > num:
         range_end = num
+    pictures = {}
     for i in range(cursor, range_end):
         pictures[goods_detail[str(i)][u'主图存储路径']] = u'商品序号:%d' % i
-    out_long_pic_path = u'pictures\\%s.jpg' % (user_name + '_longpic_' + cur_time + '_' + str(random.randint(1,1000)))
-    StitchPictures(pictures, out_long_pic_path, quality=30)
+    out_long_pic_path = PICTURES_FOLD_PATH + u'%s.jpg' % (user_name + '_longpic_' + cur_time + '_' + str(random.randint(1,1000)))
+    StitchPictures(pictures, out_long_pic_path, quality=70)
     # 将长图路径更新到数据库
     db_table.update_one({'user': user_name}, {"$set": {'goods.long_pic.%s' % cur_time: out_long_pic_path}})
     # 发送文案和长图
     to_name = room_name
-    itchat.update_friend(user_name)
-    if itchat.search_friends(None, user_name):
-        to_name = user_name
-    if first_time:
-        if to_name == room_name:
-            SendMessage('@msg@%s' % (u'@%s 找到【%d】个商品，发送第%d页:') % (nick_name, num, ((cursor+1)/GOODS_PER_TIME)+1), to_name)
+    SendMessage('@msg@%s' % (u'@%s 共找到%d个商品，当前第%d页:') % (nick_name, num, (cursor/GOODS_PER_TIME)+1), to_name)
     SendMessage('@img@%s' % out_long_pic_path, to_name)
     for i in range(cursor, range_end):
-        SendMessage('@msg@%s' % ((u'商品序号:%d\n' % i) + make_text(goods_detail[i])), to_name)
+        time.sleep(0.5)
+        SendMessage('@msg@%s' % ((u'商品序号:%d\n' % i) + make_text(goods_detail[str(i)])), to_name)
+    if range_end != num:
+        SendMessage('@msg@%s' % (u'回复【下一页】，查看下页商品'), to_name)
     # 发送成功之后，更新cursor
-    for i in range(cursor, range_end):
-        print (u'商品序号:%d\n' % i) + make_text(goods_detail[i])
-    db_table.update_one({'user': user_name}, {"$set": {'goods.cursor': range_end-1}})
+    db_table.update_one({'user': user_name}, {"$set": {'goods.cursor': range_end}})
+    # for i in range(cursor, range_end):
+    #     print (u'商品序号:%d\n' % i) + make_text(goods_detail[str(i)])
 
 @itchat.msg_register(itchat.content.FRIENDS)
 def ItchatMessageFriend(msg):
@@ -1480,8 +1496,8 @@ class communicate_with_lianmeng:
         d = {'room': room, 'user': user, 'remark': remark, 'nick': nick, 'keyword': keyword}
         return d
 
-    def send_msg_to_lianmeng(self, package):
-        self.q_out.put(('find', package))
+    def send_msg_to_lianmeng(self, type, package):
+        self.q_out.put((type, package))
 
     def send_goods_to_user(self, package):
         p = threading.Thread(target=SendGoodsToUser, args=(package['room'], package['user'], package['nick']))
@@ -1496,9 +1512,16 @@ class communicate_with_lianmeng:
             type, msg = self.q_in.get()
             print u'收到lianmeng进程命令'
             if type == 'response':
-                self.send_goods_to_user(msg)
-            elif type == 'cmd':
-                print 'cmd'
+                if msg['result'] == SUCCESS:
+                    self.send_goods_to_user(msg)
+                elif msg['result'] == NO_GOODS:
+                    SendMessage('@msg@%s' % ((u'@%s 没有找到商品，换个搜索词试试吧') % msg['nick']), msg['room'])
+                elif msg['result'] <= RETRY_TIME_OUT:
+                    SendMessage('@msg@%s' % ((u'@%s 网络出了些问题，稍后再试吧') % msg['nick']), msg['room'])
+            elif type == 'login':
+                master_name = itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']
+                SendMessage('@msg@%s' % u'主人，请登录淘宝账号', master_name)
+                SendMessage('@img@%s' % msg, master_name)
 
     def create_receive_from_lianmeng_thread(self):
         thread = threading.Thread(target=self.receive_from_lianmeng_thread,)
@@ -1526,14 +1549,14 @@ class communicate_with_main:
                 if msg == 'UI':
                     print u'开始创建UI线程'
                     CreateUiThread()
-                if msg == u'下一个':
-                    print u'WeChat，收到，下一个命令'
+                if msg == u'下一页':
+                    print u'WeChat，收到命令，下一页'
                     communicate_with_lianmeng().send_goods_to_user({'room':'default', 'user':'123456', 'nick':'Rickey'})
 
 def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     print u'wechat_main: 进程开始'
     print u'wechat_main: 创建GIT线程'
-    # CreateGitThread()
+    CreateGitThread()
     print u'wechat_main: 创建接收main进程命令的线程'
     communicate_with_main.q_out = q_wechat_main
     communicate_with_main.q_in = q_main_wechat
@@ -1543,7 +1566,7 @@ def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wech
     communicate_with_lianmeng.q_in = q_lianmeng_wechat
     communicate_with_lianmeng().create_receive_from_lianmeng_thread()
 
-    while True:
-        time.sleep(50)
-    # itchat.auto_login()
-    # itchat.run()
+    # while True:
+    #     time.sleep(50)
+    itchat.auto_login()
+    itchat.run()

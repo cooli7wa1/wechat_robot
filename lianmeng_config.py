@@ -1,10 +1,10 @@
 #coding:utf-8
 from common_config import *
+import os
 
 SERVICE_ARGS = ['--load-images=false', '--disk-cache=true', '--output-encoding=utf8', '--script-encoding=utf8']
 DOWNLOAD_IMG_SIZE = '_400x400'
-CODE_IMAGE_PATH = 'codeimage.jpg'
-EXCEL_FOLD_PATH = 'excels\\'
+RETRY_TIMES = 5
 
 # 查找商品相关设定
 # 页数
