@@ -1556,7 +1556,7 @@ class communicate_with_main:
 def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     print u'wechat_main: 进程开始'
     print u'wechat_main: 创建GIT线程'
-    CreateGitThread()
+    # CreateGitThread()
     print u'wechat_main: 创建接收main进程命令的线程'
     communicate_with_main.q_out = q_wechat_main
     communicate_with_main.q_in = q_main_wechat

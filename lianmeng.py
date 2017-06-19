@@ -120,7 +120,7 @@ class browser:
                 img_url = self.wait.until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, '#J_QRCodeImg > img'))).get_attribute('src')
                 cur_time = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
-                code_image_path = CODE_IMAGE_FOLD_PATH + '_%s.jpg' % cur_time
+                code_image_path = CODE_IMAGE_FOLD_PATH + 'codeimage_%s.jpg' % cur_time
                 self.__download(img_url, code_image_path)
                 # 显示二维码，待扫描
                 # self.__print_qr(code_image_path)

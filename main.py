@@ -27,7 +27,8 @@ if __name__ == '__main__':
 
     os_f = os.popen('uname')
     os_system = os_f.read().replace('\n', '')
-    if not os_system == 'Linux':
+    if 0:
+    # if not os_system == 'Linux':
         while True:
             msg = raw_input('enter cmd: ').decode('utf-8')
             if msg == 'UI':
