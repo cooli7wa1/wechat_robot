@@ -1,27 +1,14 @@
 #!/bin/bash
 
-ROBOT_DATA_PATH=''
+ROBOT_DATA_PATH=$HOME/Documents/robot_data/
+MONGODB_BACKUP_PATH=$ROBOT_DATA_PATH/xiaoyezi/mongodb
 
 echo -e "\033[31m 上传 \033[0m"
-echo 'enter where are you? (ali,home,work)'
-read place
-case "$place" in
-ali)
-	ROBOT_DATA_PATH=/root/robot_data
-	;;
-home)
-	ROBOT_DATA_PATH=/home/cooli7wa/Documents/robot_data
-	;;
-work)
-	ROBOT_DATA_PATH=/home/cooli7wa/Documents/robot_data
-	;;
-*)
-	echo 'place wrong'
+echo 'are you sure?'
+read tmp
+if [ u$tmp != u'yes' ];then
 	exit 1
-	;;
-esac
-
-MONGODB_BACKUP_PATH=$ROBOT_DATA_PATH/xiaoyezi/mongodb
+fi
 
 echo -e "\033[34m ==> enter mongodb fold \033[0m"
 cd $MONGODB_BACKUP_PATH
