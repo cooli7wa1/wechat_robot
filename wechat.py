@@ -65,7 +65,7 @@ def StitchPictures(images, out_path, mode='V', quality=100):
     per_image_size = Image.open(items[0][0]).size
     for i in range(num):
         image_ori = Image.open(items[i][0])
-        fnt = ImageFont.truetype('STXINWEI.TTF', 70)
+        fnt = ImageFont.truetype(FONT_PATH, 70)
         d = ImageDraw.Draw(image_ori)
         d.text((20, 50), items[i][1], font=fnt, fill=(0, 0, 0, 0))
         if image_ori.size != per_image_size:
