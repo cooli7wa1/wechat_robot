@@ -323,15 +323,18 @@ def lianmeng_main(q_wechat_lianmeng, q_lianmeng_wechat):
     print u'lianmeng_main: 开始初始化浏览器'
     browser_1 = browser(q_lianmeng_wechat, q_wechat_lianmeng)
     browser_1.init_browser()
-    print u'lianmeng_main: 开始接收来自wechat的命令'
-    while True:
-        type, msg = browser_1.q_in.get()
-        if type == 'find':
-            browser_1.package = msg
-            print u'lianmeng_main: 收到命令来自用户【%s】，开始查找【%s】' % (msg['nick'], msg['keyword'])
-            result = browser_1.ali_search(msg['keyword'])
-            response_package = make_package(room=msg['room'], user=msg['user'], nick=msg['nick'], result=result)
-            browser_1.q_out.put(('response', response_package))
-        elif type == 'cmd':
-            print u'lianmeng_main: 收到cmd'
-            pass
+    try:
+        print u'lianmeng_main: 开始接收来自wechat的命令'
+        while True:
+            type, msg = browser_1.q_in.get()
+            if type == 'find':
+                browser_1.package = msg
+                print u'lianmeng_main: 收到命令来自用户【%s】，开始查找【%s】' % (msg['nick'], msg['keyword'])
+                result = browser_1.ali_search(msg['keyword'])
+                response_package = make_package(room=msg['room'], user=msg['user'], nick=msg['nick'], result=result)
+                browser_1.q_out.put(('response', response_package))
+            elif type == 'cmd':
+                print u'lianmeng_main: 收到cmd'
+                pass
+    finally:
+        browser_1.browser.close()
