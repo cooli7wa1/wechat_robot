@@ -2,6 +2,7 @@
 
 ROBOT_DATA_PATH=''
 
+echo -e "\033[31m 上传 \033[0m"
 echo 'enter where are you? (ali,home,work)'
 read place
 case "$place" in
