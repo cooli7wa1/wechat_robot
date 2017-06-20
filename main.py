@@ -27,20 +27,20 @@ if __name__ == '__main__':
 
     os_f = os.popen('uname')
     os_system = os_f.read().replace('\n', '')
-    if 0:
-    # if not os_system == 'Linux':
+    # if 0:
+    if 1:
         while True:
             msg = raw_input('enter cmd: ').decode('utf-8')
             if msg == 'UI':
                 print u'输入了UI命令，将命令发送到wechat进程'
                 q_main_wechat.put(('cmd', msg))
-            elif re.match(u'找.*', msg):
-                print u'输入了命令，找xx，将命令发送到lianmeng进程'
-                find_package = make_package(room=u'default', user=u'123456', remark=u'ltj_1', nick=u'Rickey', keyword=msg[1:])
-                q_wechat_lianmeng.put(('find', find_package))
-            elif msg == u'下一页':
-                print u'输入了命令，下一页，将命令发送到wechat进程'
-                q_main_wechat.put(('cmd', msg))
+            # elif re.match(u'找.*', msg):
+            #     print u'输入了命令，找xx，将命令发送到lianmeng进程'
+            #     find_package = make_package(room=u'default', user=u'123456', remark=u'ltj_1', nick=u'Rickey', keyword=msg[1:])
+            #     q_wechat_lianmeng.put(('find', find_package))
+            # elif msg == u'下一页':
+            #     print u'输入了命令，下一页，将命令发送到wechat进程'
+            #     q_main_wechat.put(('cmd', msg))
             else:
                 pass
     else:

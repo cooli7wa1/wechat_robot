@@ -10,15 +10,9 @@ NO_GOODS = -1
 RETRY_TIME_OUT = -2
 LOG_IN_TIME_OUT = -3
 
-os_f = os.popen('uname')
-os_system = os_f.read().replace('\n','')
-if os_system == 'Linux':
-    PICTURES_FOLD_PATH = u'/root/robot_data/xiaoyezi/pictures/'
-    EXCEL_FILE_PATH = u'/root/robot_data/xiaoyezi/goods_excel.xls'
-    CODE_IMAGE_FOLD_PATH = u'/root/robot_data/xiaoyezi/'
-else:
-    PICTURES_FOLD_PATH = u'F:\\robot_data\\xiaoyezi\\pictures\\'
-    EXCEL_FILE_PATH = u'F:\\robot_data\\xiaoyezi\\goods_excel.xls'
-    CODE_IMAGE_FOLD_PATH = u'F:\\robot_data\\xiaoyezi\\'
+os_documents_path = os.popen('echo $HOME').read().replace('\n','') + u'/Documents/'
+PICTURES_FOLD_PATH = os_documents_path + u'robot_data/xiaoyezi/pictures/'
+EXCEL_FILE_PATH = os_documents_path + u'robot_data/xiaoyezi/goods_excel.xls'
+CODE_IMAGE_FOLD_PATH = os_documents_path + u'robot_data/xiaoyezi/'
 
 

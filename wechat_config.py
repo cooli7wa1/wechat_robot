@@ -1,50 +1,18 @@
 #coding:utf-8
-import os, logging, time
+import logging, time
 from common_config import *
 
-os_f = os.popen('uname')
-os_system = os_f.read().replace('\n','')
-if os_system == 'Linux':
-    ORDER_FILE_PATH = u'/root/robot_data/xiaoyezi/integral_record/order_file.txt'
-    GIT_DATA_FOLD = u'/root/robot_data/'
-    GIT_CODE_FOLD = u'/root/wechat_robot/'
-    DATABASE_FOLD = u'/root/robot_data/xiaoyezi/database/'
-    ACTIVITY_FOLD = u'/root/robot_data/xiaoyezi/activity/'
-    TEMPLATE_FOLD = u'/root/robot_data/xiaoyezi/template/'
-    LOG_FOLD = u'/root/robot_data/xiaoyezi/log/'
-    MEMBER_RECORD_PATH = u'/root/robot_data/xiaoyezi/member_record/member_record.txt'
-    INTEGRAL_GOOD_FOLD = u'/root/robot_data/xiaoyezi/integral_good/'
-    INTEGRAL_RECORD_FOLD = u'/root/robot_data/xiaoyezi/integral_record/'
-else:
-    # if raw_input('Already sync data?(1:yes, other:no)') == '1':
-    #     where_am_i = raw_input(u'master, where are you?(1:home,2:workplace)')
-    #     if where_am_i == '2':
-    #         ORDER_FILE_PATH = u'E:\\Documents\\robot_data\\xiaoyezi\\integral_record\\order_file.txt'
-    #         GIT_DATA_FOLD = u'E:\\Documents\\robot_data\\'
-    #         GIT_CODE_FOLD = u'E:\\Documents\\wechat_robot\\'
-    #         DATABASE_FOLD = u'E:\\Documents\\robot_data\\xiaoyezi\\database\\'
-    #         ACTIVITY_FOLD = u'E:\\Documents\\robot_data\\xiaoyezi\\activity\\'
-    #         TEMPLATE_FOLD = u'E:\\Documents\\robot_data\\xiaoyezi\\template\\'
-    #         LOG_FOLD = u'E:\\Documents\\robot_data\\xiaoyezi\\log\\'
-    #         MEMBER_RECORD_PATH = u'E:\\Documents\\robot_data\\xiaoyezi\\member_record\\member_record.txt'
-    #         INTEGRAL_GOOD_FOLD = u'E:\\Documents\\robot_data\\xiaoyezi\\integral_good\\'
-    #         INTEGRAL_RECORD_FOLD = u'E:\\Documents\\robot_data\\xiaoyezi\\integral_record\\'
-    #     elif where_am_i == '1':
-    ORDER_FILE_PATH = u'F:\\robot_data\\xiaoyezi\\integral_record\\order_file.txt'
-    GIT_DATA_FOLD = u'F:\\robot_data\\'
-    GIT_CODE_FOLD = u'E:\\PycharmProjects\\wechat_robot\\'
-    DATABASE_FOLD = u'F:\\robot_data\\xiaoyezi\\database\\'
-    ACTIVITY_FOLD = u'F:\\robot_data\\xiaoyezi\\activity\\'
-    TEMPLATE_FOLD = u'F:\\robot_data\\xiaoyezi\\template\\'
-    LOG_FOLD = u'F:\\robot_data\\xiaoyezi\\log\\'
-    MEMBER_RECORD_PATH = u'F:\\robot_data\\xiaoyezi\\member_record\\member_record.txt'
-    INTEGRAL_GOOD_FOLD = u'F:\\robot_data\\xiaoyezi\\integral_good\\'
-    INTEGRAL_RECORD_FOLD = u'F:\\robot_data\\xiaoyezi\\integral_record\\'
-    #     else:
-    #         print 'place wrong'
-    #         os._exit(0)
-    # else:
-    #     os._exit(0)
+os_documents_path = os.popen('echo $HOME').read().replace('\n','') + u'/Documents/'
+ORDER_FILE_PATH = os_documents_path + u'robot_data/xiaoyezi/integral_record/order_file.txt'
+GIT_DATA_FOLD = os_documents_path + u'robot_data/'
+GIT_CODE_FOLD = os_documents_path + u'wechat_robot/'
+DATABASE_FOLD = os_documents_path + u'robot_data/xiaoyezi/database/'
+ACTIVITY_FOLD = os_documents_path + u'robot_data/xiaoyezi/activity/'
+TEMPLATE_FOLD = os_documents_path + u'robot_data/xiaoyezi/template/'
+LOG_FOLD = os_documents_path + u'robot_data/xiaoyezi/log/'
+MEMBER_RECORD_PATH = os_documents_path + u'robot_data/xiaoyezi/member_record/member_record.txt'
+INTEGRAL_GOOD_FOLD = os_documents_path + u'robot_data/xiaoyezi/integral_good/'
+INTEGRAL_RECORD_FOLD = os_documents_path + u'robot_data/xiaoyezi/integral_record/'
 
 COMMAND_LIST = [u'看活动', u'查积分', u'签到', u'帮助', u'积分玩法', u'积分商品', u'兑换流程']
 SEND_DELAY = 3  # 发送等待

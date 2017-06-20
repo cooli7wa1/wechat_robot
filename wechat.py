@@ -1,12 +1,10 @@
 #coding:utf-8
 import random
-
-import itchat,time,shelve,re,os,codecs,threading,inspect,ctypes,wx
+import itchat,shelve,re,codecs,threading,inspect,ctypes,wx
 import pymongo
 import wx.grid
 from copy import deepcopy
 from PIL import Image, ImageDraw, ImageFont
-from multiprocessing import Process, Queue
 from wechat_config import *
 import sys
 reload(sys)
@@ -1058,6 +1056,9 @@ def SendGoodsToUser(room_name, user_name, nick_name):
     cur_time = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
     db_table = pymongo.MongoClient(MONGO_URL, connect=False)[MONGO_DB][MONGO_TABLE]
     table_cursor = db_table.find({'user': user_name})
+    if table_cursor.count() == 0:
+        SendMessage('@msg@%s' % ((u'@%s 没有商品记录，重新搜索吧') % nick_name), room_name)
+        return
     goods = table_cursor.next()['goods']
     goods_detail = goods['goods_detail']
     cursor = goods['cursor'] # 下一个要发送的商品
@@ -1492,6 +1493,7 @@ def CreateGitThread():
 class communicate_with_lianmeng:
     q_out = None
     q_in = None
+    wechat_login_ok = False
     def make_package(self, room=u'', user=u'', remark=u'', nick=u'', keyword=u''):
         d = {'room': room, 'user': user, 'remark': remark, 'nick': nick, 'keyword': keyword}
         return d
@@ -1519,6 +1521,8 @@ class communicate_with_lianmeng:
                 elif msg['result'] <= RETRY_TIME_OUT:
                     SendMessage('@msg@%s' % ((u'@%s 网络出了些问题，稍后再试吧') % msg['nick']), msg['room'])
             elif type == 'login':
+                while not self.wechat_login_ok:
+                    time.sleep(2)
                 master_name = itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']
                 SendMessage('@msg@%s' % u'主人，请登录淘宝账号', master_name)
                 SendMessage('@img@%s' % msg, master_name)
@@ -1549,9 +1553,9 @@ class communicate_with_main:
                 if msg == 'UI':
                     print u'开始创建UI线程'
                     CreateUiThread()
-                if msg == u'下一页':
-                    print u'WeChat，收到命令，下一页'
-                    communicate_with_lianmeng().send_goods_to_user({'room':'default', 'user':'123456', 'nick':'Rickey'})
+                # if msg == u'下一页':
+                #     print u'WeChat，收到命令，下一页'
+                #     communicate_with_lianmeng().send_goods_to_user({'room':'default', 'user':'123456', 'nick':'Rickey'})
 
 def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     print u'wechat_main: 进程开始'
@@ -1569,4 +1573,5 @@ def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wech
     # while True:
     #     time.sleep(50)
     itchat.auto_login()
+    communicate_with_lianmeng.wechat_login_ok = True
     itchat.run()

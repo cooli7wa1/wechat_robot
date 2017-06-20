@@ -1,8 +1,6 @@
 #coding:utf-8
-import os, platform, requests, time, pymongo, xlrd, subprocess
+import platform, requests, time, pymongo, xlrd, subprocess
 import random
-from hashlib import md5
-from requests import RequestException
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver import ActionChains
@@ -10,7 +8,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from lianmeng_config import *
-from multiprocessing import Queue
 from pyquery import PyQuery as pq
 import sys
 reload(sys)
