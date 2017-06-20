@@ -937,6 +937,10 @@ def single_text_reply(msg):
 
 def group_text_reply(msg):
     logging.debug(u'==== 开始')
+    if itchat.search_friends(None, msg['ActualUserName']):
+        nick_name = (itchat.search_friends(None, msg['ActualUserName']))['NickName']
+    else:
+        nick_name = msg['ActualNickName']
     if msg['Text'] in COMMAND_LIST:
         logging.debug(u'==== 聊天内容： ' + msg['Text'])
         if itchat.search_friends(None, msg['ActualUserName']):
@@ -957,16 +961,16 @@ def group_text_reply(msg):
     elif re.match(u'找 .*', msg['Text']):
         key_word = msg['Text'][2:]
         logging.debug(u'==== 收到查找商品命令: %s' % msg['Text'])
-        SendMessage('@msg@%s' % (u'@%s 正在为您查找商品【%s】，请稍等...' % (msg['ActualNickName'], key_word)), msg['FromUserName'])
+        SendMessage('@msg@%s' % (u'@%s 正在为您查找商品【%s】，请稍等...' % (nick_name, key_word)), msg['FromUserName'])
         friend = itchat.search_friends(None, msg['ActualUserName'])
         remark_name = ''
         if friend:
             remark_name = friend['RemarkName']
-        package = communicate_with_lianmeng().make_package(room=msg['FromUserName'], user=msg['ActualUserName'], remark=remark_name, nick=msg['ActualNickName'], keyword=key_word)
+        package = communicate_with_lianmeng().make_package(room=msg['FromUserName'], user=msg['ActualUserName'], remark=remark_name, nick=nick_name, keyword=key_word)
         communicate_with_lianmeng().send_msg_to_lianmeng('find', package)
     elif msg['Text'] == u'下一页':
         logging.debug(u'==== 收到命令，下一页')
-        communicate_with_lianmeng().send_goods_to_user({'room': msg['FromUserName'], 'user': msg['ActualUserName'], 'nick': msg['ActualNickName']})
+        communicate_with_lianmeng().send_goods_to_user({'room': msg['FromUserName'], 'user': msg['ActualUserName'], 'nick': nick_name})
     logging.debug(u'==== 结束')
     return
 
@@ -1457,6 +1461,8 @@ def UpdateToGit(is_robot=True, is_data=True):
     logging.debug(u'==== GIT开始上传数据')
     cnt = 0
     if is_data:
+        os.chdir(MONGO_DB_DUMP_FOLD)
+        os.system('mongodump')
         os.chdir(GIT_DATA_FOLD)
     else:
         os.chdir(GIT_CODE_FOLD)

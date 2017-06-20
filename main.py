@@ -25,10 +25,8 @@ if __name__ == '__main__':
     p_lianmeng.daemon = True
     p_lianmeng.start()
 
-    os_f = os.popen('uname')
-    os_system = os_f.read().replace('\n', '')
-    # if 0:
-    if 1:
+    os_home = os.popen('echo $HOME').read().replace('\n', '')
+    if not os_home == u'/root':
         while True:
             msg = raw_input('enter cmd: ').decode('utf-8')
             if msg == 'UI':

@@ -6,6 +6,7 @@ os_documents_path = os.popen('echo $HOME').read().replace('\n','') + u'/Document
 ORDER_FILE_PATH = os_documents_path + u'robot_data/xiaoyezi/integral_record/order_file.txt'
 GIT_DATA_FOLD = os_documents_path + u'robot_data/'
 GIT_CODE_FOLD = os_documents_path + u'wechat_robot/'
+MONGO_DB_DUMP_FOLD = os_documents_path + u'robot_data/xiaoyezi/mongodb/'
 DATABASE_FOLD = os_documents_path + u'robot_data/xiaoyezi/database/'
 ACTIVITY_FOLD = os_documents_path + u'robot_data/xiaoyezi/activity/'
 TEMPLATE_FOLD = os_documents_path + u'robot_data/xiaoyezi/template/'
