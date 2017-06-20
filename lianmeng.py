@@ -24,6 +24,7 @@ class browser:
         self.db_table_search = self.client[MONGO_DB][MONGO_TABLE_SEARCH]
         self.options = webdriver.ChromeOptions()
         self.options.add_argument('headless')
+        self.options.add_argument('disable-gpu')
         self.options.add_argument('window-size=1400x900')
         self.browser = webdriver.Chrome(chrome_options=self.options)
         self.wait = WebDriverWait(self.browser, 5)
