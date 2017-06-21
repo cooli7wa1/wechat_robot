@@ -1516,9 +1516,12 @@ class communicate_with_lianmeng:
 
     def receive_from_lianmeng_thread(self):
         while True:
-            print u'开始接收来自lianmeng进程命令'
+            while not self.wechat_login_ok:
+                logging.debug(u'等待wechat登录')
+                time.sleep(2)
+            logging.info(u'开始接收来自lianmeng进程命令')
             type, msg = self.q_in.get()
-            print u'收到lianmeng进程命令'
+            logging.debug(u'收到lianmeng进程命令, %s %s' % (type, msg))
             if type == 'response':
                 if msg['result'] == SUCCESS:
                     self.send_goods_to_user(msg)
@@ -1526,12 +1529,16 @@ class communicate_with_lianmeng:
                     SendMessage('@msg@%s' % ((u'@%s 没有找到商品，换个搜索词试试吧') % msg['nick']), msg['room'])
                 elif msg['result'] <= RETRY_TIME_OUT:
                     SendMessage('@msg@%s' % ((u'@%s 网络出了些问题，稍后再试吧') % msg['nick']), msg['room'])
-            elif type == 'login':
-                while not self.wechat_login_ok:
-                    time.sleep(2)
+            else:
                 master_name = itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']
-                SendMessage('@msg@%s' % u'主人，请登录淘宝账号', master_name)
-                SendMessage('@img@%s' % msg, master_name)
+                if type == 'login':
+                    SendMessage('@msg@%s' % u'请登录淘宝账号', master_name)
+                    SendMessage('@img@%s' % msg, master_name)
+                elif type == 'result':
+                    if msg == 'success':
+                        SendMessage('@msg@%s' % u'淘宝登录成功', master_name)
+                    elif msg == 'fail':
+                        SendMessage('@msg@%s' % u'淘宝登录失败', master_name)
 
     def create_receive_from_lianmeng_thread(self):
         thread = threading.Thread(target=self.receive_from_lianmeng_thread,)
@@ -1552,26 +1559,26 @@ class communicate_with_main:
 
     def receive_from_main_thread(self):
         while True:
-            print u'开始接收Main进程命令'
+            logging.info(u'开始接收Main进程命令')
             type, msg = self.q_in.get()
-            print u'收到Main进程命令'
+            logging.debug(u'收到Main进程命令 %s %s' % (type, msg))
             if type == 'cmd':
                 if msg == 'UI':
-                    print u'开始创建UI线程'
+                    logging.debug(u'开始创建UI线程')
                     CreateUiThread()
                 # if msg == u'下一页':
                 #     print u'WeChat，收到命令，下一页'
                 #     communicate_with_lianmeng().send_goods_to_user({'room':'default', 'user':'123456', 'nick':'Rickey'})
 
 def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
-    print u'wechat_main: 进程开始'
-    print u'wechat_main: 创建GIT线程'
+    logging.info(u'wechat_main: 进程开始')
+    logging.info(u'wechat_main: 创建GIT线程')
     CreateGitThread()
-    print u'wechat_main: 创建接收main进程命令的线程'
+    logging.info(u'wechat_main: 创建接收main进程命令的线程')
     communicate_with_main.q_out = q_wechat_main
     communicate_with_main.q_in = q_main_wechat
     communicate_with_main().create_receive_from_main_thread()
-    print u'wechat_main: 创建接收lianmeng进程命令的线程'
+    logging.info(u'wechat_main: 创建接收lianmeng进程命令的线程')
     communicate_with_lianmeng.q_out = q_wechat_lianmeng
     communicate_with_lianmeng.q_in = q_lianmeng_wechat
     communicate_with_lianmeng().create_receive_from_lianmeng_thread()
