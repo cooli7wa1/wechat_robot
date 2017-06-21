@@ -2,6 +2,7 @@
 import os
 import re
 import time
+from common_config import *
 
 from wechat import wechat_main
 from lianmeng import lianmeng_main
@@ -30,7 +31,7 @@ if __name__ == '__main__':
         while True:
             msg = raw_input('enter cmd: ').decode('utf-8')
             if msg == 'UI':
-                print u'输入了UI命令，将命令发送到wechat进程'
+                logging.debug(u'输入了UI命令，将命令发送到wechat进程')
                 q_main_wechat.put(('cmd', msg))
             # elif re.match(u'找.*', msg):
             #     print u'输入了命令，找xx，将命令发送到lianmeng进程'

@@ -1,5 +1,4 @@
 #coding:utf-8
-import logging, time
 from common_config import *
 
 os_documents_path = os.popen('echo $HOME').read().replace('\n','') + u'/Documents/'
@@ -10,7 +9,6 @@ MONGO_DB_DUMP_FOLD = os_documents_path + u'robot_data/xiaoyezi/mongodb/'
 DATABASE_FOLD = os_documents_path + u'robot_data/xiaoyezi/database/'
 ACTIVITY_FOLD = os_documents_path + u'robot_data/xiaoyezi/activity/'
 TEMPLATE_FOLD = os_documents_path + u'robot_data/xiaoyezi/template/'
-LOG_FOLD = os_documents_path + u'robot_data/xiaoyezi/log/'
 MEMBER_RECORD_PATH = os_documents_path + u'robot_data/xiaoyezi/member_record/member_record.txt'
 INTEGRAL_GOOD_FOLD = os_documents_path + u'robot_data/xiaoyezi/integral_good/'
 INTEGRAL_RECORD_FOLD = os_documents_path + u'robot_data/xiaoyezi/integral_record/'
@@ -30,14 +28,3 @@ label_ddlr = u"会员名 订单编号 订单价格 佣金比例".split()
 label_jfdh = u"会员名 商品编号 商品价格 订单编号".split()
 label_jljf = u"会员名 奖励积分".split()
 
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s',
-                    datefmt='%a %d %b %Y %H:%M:%S',
-                    filename=LOG_FOLD + 'log_' + time.strftime('%Y-%m-%d_%H%M%S', time.localtime(time.time())) + '.txt',
-                    filemode='w')
-
-console = logging.StreamHandler()
-console.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s')
-console.setFormatter(formatter)
-logging.getLogger('').addHandler(console)
