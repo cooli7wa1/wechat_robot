@@ -6,3 +6,4 @@ dist/
 *.png
 *.pyc
 QR.png
+nohup.out
