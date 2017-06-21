@@ -1,2 +1,2 @@
 #!/bin/bash
-nohup python wechat_robot/main.py &
+nohup python main.py &
