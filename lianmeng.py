@@ -135,6 +135,7 @@ class browser:
                         times +=1
                         if times >= 30:
                             logging.debug(u'超过一分钟未登录，登录失败')
+                            os.remove(code_image_path)
                             self.retry_time = 0
                             return LOG_IN_TIME_OUT
             else:
