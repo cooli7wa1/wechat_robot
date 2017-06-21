@@ -1,3 +1,3 @@
 #!/bin/bash
-scp root@47.94.156.71:/root/Documents/wechat_robot/QR.png ./ &&
-xdg-open QR.png
+scp root@47.94.156.71:/root/Documents/wechat_robot/QR.png /home/cooli7wa/Downloads/ &&
+xdg-open /home/cooli7wa/Downloads/QR.png
