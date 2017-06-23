@@ -32,6 +32,7 @@ def stop_thread(thread):
 def SendMessage(msg, user):
     '''另起线程发送消息，默认等待3秒，如果还未结束，就强制结束，并重发，一共重发3次
     三次重发内成功，返回0，失败返回-1'''
+    send_message_lock.acquire()
     logging.debug(u'==== 开始')
     try:
         cnt1 = 0
@@ -52,10 +53,11 @@ def SendMessage(msg, user):
                 time.sleep(0.2)
             if cnt < SEND_DELAY*5:
                 logging.debug(u'==== 消息发送成功，循环次数：' + repr(cnt1) + u'  等待时间：' + repr(cnt*0.2))
-                return
+                return 0
             if cnt1 >= SEND_TIMES:
-                return
+                return -1
     finally:
+        send_message_lock.release()
         logging.debug(u'==== 结束')
 
 def StitchPictures(images, out_path, mode='V', quality=100):
@@ -150,31 +152,12 @@ class Database:
                 if tmp['points'] < 0:
                     tmp['points'] = 0
                 database[remark_name] = tmp
-                # 更改父会员的积分
-                if points > 0:
-                    father = self.__DatabaseFindFather(database, remark_name)
-                    if father:
-                        tmp = database[father]
-                        father_points = int(round(points/5.0))
-                        tmp['points'] += father_points
-                        database[father] = tmp
-                        cur_points = self.__DatabaseViewPoints(database, father)
-                        IntegralRecord().IntegralRecordAddRecord(father, u'好友奖励积分',  'None', 'None', str(father_points), str(cur_points))
-                        # 将积分变更通知给父会员
-                        SendMessage('@msg@%s' % (u'亲，您邀请的朋友 ' + itchat.search_friends(remarkName=remark_name)[0]['NickName'] +
-                                                 u' 给您带来了 ' + repr(int(round(points/5.0))) + u' 积分的奖励， 当前积分为：' + str(cur_points)),
-                                    (itchat.search_friends(remarkName=father)[0]['UserName']))
-                        # SendMessageToRoom(ROOM_NICK_NAME,
-                        #                   u'@' + itchat.search_friends(remarkName=father)[0]['NickName'] +
-                        #                   u' 您邀请的好友积分提升，恭喜您同时获得【' + repr(father_points) + u'】积分的奖励')
-                        logging.debug('==== father: ' + repr(database[father]))
                 logging.debug('==== self:' + repr(database[remark_name]))
                 database.close()
                 return 0
             else:
                 logging.error(u'==== 没找到用户')
-                SendMessage('@msg@%s' % (u'报告主人：Database没有找到用户, remark_name: ' + remark_name),
-                            (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
+                SendMessage(u'报告主人：Database没有找到用户, remark_name: ' + remark_name, 'filehelper')
                 database.close()
                 return -1
         finally:
@@ -210,31 +193,13 @@ class Database:
                 database[remark_name] = tmp
                 cur_points = self.__DatabaseViewPoints(database, remark_name)
                 IntegralRecord().IntegralRecordAddRecord(remark_name, u'签到', 'None', 'None', str(CHECK_IN_POINTS), str(cur_points))
-                # 更改父会员积分
-                father = self.__DatabaseFindFather(database, remark_name)
-                if father:
-                    tmp = database[father]
-                    father_points = int(round(CHECK_IN_POINTS / 5.0))
-                    tmp['points'] += father_points
-                    database[father] = tmp
-                    cur_points = self.__DatabaseViewPoints(database, father)
-                    IntegralRecord().IntegralRecordAddRecord(father, u'好友奖励积分', 'None', 'None', str(father_points), str(cur_points))
-                    # 通知父会员
-                    SendMessage('@msg@%s' % (u'亲，您邀请的朋友 ' + itchat.search_friends(remarkName=remark_name)[0]['NickName'] +
-                                             u' 给您带来了 ' + repr(int(round(CHECK_IN_POINTS / 5.0))) + u' 积分的奖励，当前积分为：' + str(cur_points)),
-                                (itchat.search_friends(remarkName=father)[0]['UserName']))
-                    # SendMessageToRoom(ROOM_NICK_NAME,
-                    #                   u'@' + itchat.search_friends(remarkName=father)[0]['NickName'] +
-                    #                   u' 您邀请的好友积分提升，恭喜您同时获得【' + repr(father_points) + u'】积分的奖励')
-                    logging.debug('==== father: ' + repr(database[father]))
                 logging.debug(u'==== 签到成功')
                 logging.debug('==== self: ' + repr(database[remark_name]))
                 database.close()
                 return 0
             else:
                 logging.error(u'==== 没找到用户')
-                SendMessage('@msg@%s' % (u'报告主人：Database没有找到用户, remark_name: ' + remark_name),
-                            (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
+                SendMessage(u'报告主人：Database没有找到用户, remark_name: ' + remark_name, 'filehelper')
                 database.close()
                 return -2
         finally:
@@ -257,8 +222,7 @@ class Database:
                 points = database[remark_name]['points']
             else:
                 logging.error(u'==== 没找到用户')
-                SendMessage('@msg@%s' % (u'报告主人：Database没有找到用户, remark_name: ' + remark_name),
-                            (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
+                SendMessage(u'报告主人：Database没有找到用户, remark_name: ' + remark_name, 'filehelper')
             database.close()
             return points
         finally:
@@ -279,8 +243,7 @@ class Database:
                 points = database[remark_name]['points']
             else:
                 logging.error(u'==== 没找到用户')
-                SendMessage('@msg@%s' % (u'报告主人：Database没有找到用户, remark_name: ' + remark_name),
-                            (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
+                SendMessage(u'报告主人：Database没有找到用户, remark_name: ' + remark_name, 'filehelper')
             return points
         finally:
             logging.debug(u'==== 结束')
@@ -319,10 +282,6 @@ class Database:
             tmp = database['ltj_0']
             tmp['points'] += 1
             database['ltj_0'] = tmp
-            if father != '':
-                child_nick_name = itchat.search_friends(remarkName=remark_name)[0]['NickName']
-                SendMessage('@msg@%s' % (u'亲，好友【' + child_nick_name + u'】与您绑定成功，每当好友获得积分，您也会得到奖励积分哦'),
-                        (itchat.search_friends(remarkName=father)[0]['UserName']))
             logging.debug('==== mark ' + remark_name + 'next_number' + str(database['ltj_0']['points']))
             logging.debug('==== ' + repr(database[remark_name]))
             database.close()
@@ -343,8 +302,7 @@ class Database:
                 return 0
             else:
                 logging.error(u'==== 没找到用户')
-                SendMessage('@msg@%s' % (u'报告主人：Database没有找到用户, remark_name: ' + remark_name),
-                            (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
+                SendMessage(u'报告主人：Database没有找到用户, remark_name: ' + remark_name, 'filehelper')
                 database.close()
                 return -1
         finally:
@@ -362,43 +320,6 @@ class Database:
         """
         pass
 
-    def DatabaseFindFather(self, remark_name):
-        ''' 
-        检测当前会员，是否有父会员
-        @param: remark_name 当前会员名
-        @return: 父会员名，可能是None
-        '''
-        Database.database_mutex.acquire()
-        logging.debug(u'==== 开始')
-        try:
-            father = ''
-            database = shelve.open(self.data_path)
-            if remark_name in database:
-                if 'father' in database[remark_name]:
-                    father = database[remark_name]['father']
-            else:
-                logging.error(u'==== 没找到用户')
-                SendMessage('@msg@%s' % (u'报告主人：Database没有找到用户, remark_name: ' + remark_name),
-                            (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
-            database.close()
-            return father
-        finally:
-            Database.database_mutex.release()
-            logging.debug(u'==== 结束')
-
-    def __DatabaseFindFather(self, database, remark_name):
-        ''' 
-        检测当前会员，是否有父会员
-        @param: remark_name 当前会员名
-        @return: 父会员名，可能是None
-        '''
-        logging.debug(u'==== 开始')
-        father = ''
-        if 'father' in database[remark_name]:
-            father = database[remark_name]['father']
-        logging.debug(u'==== 结束')
-        return father
-
     def DatabaseViewData(self, remark_name):
         ''' 
         查看会员的所有数据
@@ -414,8 +335,7 @@ class Database:
                 user_data = deepcopy(database[remark_name])
             else:
                 logging.error(u'==== 没找到用户')
-                SendMessage('@msg@%s' % (u'报告主人：Database没有找到用户, remark_name: ' + remark_name),
-                            (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
+                SendMessage(u'报告主人：Database没有找到用户, remark_name: ' + remark_name, 'filehelper')
             database.close()
             return user_data
         finally:
@@ -442,17 +362,6 @@ class Database:
                 if tmp['father'] != user_data['father'] and user_data['father']:
                     need_notify = True
             database[remark_name] = deepcopy(user_data)
-            if need_notify:
-                friend_info = itchat.search_friends(remarkName=remark_name)
-                if friend_info:
-                    child_nick_name = itchat.search_friends(remarkName=remark_name)[0]['NickName']
-                    father_name = database[remark_name]['father']
-                    SendMessage('@msg@%s' % (u'亲，好友【' + child_nick_name + u'】与您绑定成功，每当好友获得积分，您也会得到奖励积分哦'),
-                            (itchat.search_friends(remarkName=father_name)[0]['UserName']))
-                else:
-                    logging.info(u'==== 用户不存在于好友列表')
-                    SendMessage('@msg@%s' % (u'报告主人：用户不存在于好友列表, remark_name: ' + remark_name),
-                                (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
             database.close()
             return
         finally:
@@ -484,8 +393,6 @@ class Database:
         logging.debug(u'==== 更新数据库结束')
 
 class Template:
-    send_picture_mutex = threading.Lock()  # 发图片的同步锁，防止一起发太多图片被微信查封
-
     def TemplateSendCommand(self, to):
         logging.debug(u'==== 开始')
         lines = ''
@@ -519,7 +426,6 @@ class Template:
                     logging.debug('==== match file name is ' + file)
                     has_activity = 1
                     for line in codecs.open(ACTIVITY_FOLD + file, 'rb', 'utf-8'):
-                        time.sleep(1)
                         line = line.strip()
                         if not re.match(u'&图片&', line):
                             logging.debug('==== send text: ' + line)
@@ -538,7 +444,6 @@ class Template:
         for line in codecs.open(text_path, 'r', 'utf-8'):
             line = line.strip()
             logging.debug('==== send text: ' + line)
-            time.sleep(1)
             SendMessage('@msg@%s' % line, to)
 
     def TemplateSendIntegralGood(self, to):
@@ -591,13 +496,11 @@ class Template:
                         lines = lines.strip()
                         logging.debug('==== send text: ' + lines)
                         SendMessage('@msg@%s' % lines, to)
-                        time.sleep(1)
                     line = line.strip()
                     str_tmp = TEMPLATE_FOLD + line.split('&')[2]
                     logging.debug('==== send picture: ' + str_tmp)
                     SendMessage('@img@%s' % str_tmp, to)
                     lines = ''
-                    time.sleep(1.5)
             if lines:
                 logging.debug('==== send text: ' + lines)
                 SendMessage('@msg@%s' % lines, to)
@@ -650,40 +553,6 @@ class MemberRecord:
             time_now = time.strftime('%Y-%m-%d_%H%M%S', time.localtime(time.time()))
             with codecs.open(MEMBER_RECORD_PATH, 'a', 'utf-8') as f:
                 f.write(time_now + ' ' + record)
-        finally:
-            MemberRecord.member_record_mutex.release()
-            logging.debug(u'==== 结束')
-
-    def MemberRecordFindFather(self, nick_name):
-        '''
-        这个函数在member_record文件中查找记录，来确认是否此用户是被某个会员邀请的
-        @param：nick_name 此用户的昵称，这个昵称应该和此用户进去群时的昵称一致，如果用户改过昵称，那么可能找不到father
-        @return: ① -1：没有找到father
-                 ② -2：找到多个father（昵称同名，或者多次进出群）的情况，且名字不同
-                 ③ father: 找到一个father，或者多个father但是名字相同
-        '''
-        MemberRecord.member_record_mutex.acquire()
-        logging.debug(u'==== 开始')
-        logging.debug('==== ' + nick_name)
-        try:
-            fathers = []
-            for line in codecs.open(MEMBER_RECORD_PATH, 'r', 'utf-8'):
-                line_list = line.split('"')
-                if line_list[3].encode('utf-8') == nick_name.encode('utf-8') and line_list[1].startswith('ltj_'): # father必须已经是乐淘家会员
-                    fathers.append(line_list[1].encode('utf-8'))
-            fathers = list(set(fathers))
-            nums = len(fathers)
-            if nums == 0:
-                logging.debug('==== not find father')
-                return -1
-            elif nums == 1:
-                logging.debug('==== father is ' + fathers[0])
-                return fathers[0]
-            else:
-                logging.debug('==== many fathers: ' + ''.join(fathers))
-                SendMessage('@msg@%s' % (u'报告主人：找到多个father, nick_name: ' + nick_name + 'fathers: ' + ''.join(fathers)),
-                            (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
-                return -2
         finally:
             MemberRecord.member_record_mutex.release()
             logging.debug(u'==== 结束')
@@ -800,138 +669,40 @@ def text_command_router(msg, to_name):
     logging.debug(u'==== 结束')
     return
 
-def single_text_reply(msg):
+def master_command_router(text, to_name):
     logging.debug(u'==== 开始')
-    if msg['FromUserName'] == 'newsapp':
-        logging.debug(u'==== 收到腾讯新闻消息，已屏蔽')
-        return
-    if not itchat.search_friends(None, msg['FromUserName']):
-        logging.error(u'==== 好友列表中没有找到此人, user_name:' + msg['FromUserName'] + ' text: ' + msg['Text'])
-        return
-    logging.debug('==== nick_name is ' + (itchat.search_friends(None, msg['FromUserName']))['NickName'])
-    logging.debug(u'==== 聊天内容：' + msg['Text'])
-    if (itchat.search_friends(None, msg['FromUserName']))['NickName'] == u'小叶子':
-        logging.debug(u'==== 是小叶子自己发送的消息哦')
-        logging.debug(u'==== 结束')
-        return
-    CheckAndSetRemarkName(msg['FromUserName'])
-    if msg['Text'] in COMMAND_LIST:
-        text_command_router(msg, 'FromUserName')
-    elif re.match(u'.*通过.*朋友验证请求.*可以开始聊天了.*', msg['Text']):
-        SendMessage('@msg@%s' % (u'亲，祝你每天都有好心情 [害羞]'), msg['FromUserName'])
-        Template().TemplateSendCommand(msg['FromUserName'])
-        SendMessage('@msg@%s' % (u'重新输入下上面命令哦'), msg['FromUserName'])
-    elif (itchat.search_friends(None, msg['FromUserName']))['RemarkName'] == 'ltj_1':
-        if msg['Text'] == u'上传数据':
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            if UpdateToGit(is_robot=False, is_data=True) == 0:
-                SendMessage('@msg@%s' % (msg['Text'] + u' 成功'), msg['FromUserName'])
-            else:
-                SendMessage('@msg@%s' % (msg['Text'] + u' 失败'), msg['FromUserName'])
-        elif msg['Text'] == u'上传代码':
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            if UpdateToGit(is_robot=False, is_data=False) == 0:
-                SendMessage('@msg@%s' % (msg['Text'] + u' 成功'), msg['FromUserName'])
-            else:
-                SendMessage('@msg@%s' % (msg['Text'] + u' 失败'), msg['FromUserName'])
-        elif msg['Text'] == u'更新':
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            database = Database()
-            database.DatabaseUpdateDatabase()
-            SendMessage('@msg@%s' % (u'更新结束'), msg['FromUserName'])
-        elif msg['Text'] == u'测试':
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            rooms = itchat.get_chatrooms()
-            logging.debug(rooms)
-            for i in range(len(rooms)):
-                logging.debug(rooms[i]['NickName'])
-                if rooms[i]['NickName'] == u'\u4e50\u6dd8\u5bb6\uff0c\u5185\u90e8\u4fe1\u606f\u7fa4':
-                    logging.debug(rooms[i]['UserName'])
-                    SendMessage('@msg@%s' % u'测试', rooms[i]['UserName'])
-            SendMessage('@msg@%s' % u'测试结束', msg['FromUserName'])
-        elif re.match(u'更改父亲@.*', msg['Text']):
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            msg_list = msg['Text'].split('@')
-            remark_name = ('ltj_' + msg_list[1]).encode('utf-8')
-            father_name = msg_list[2].encode('utf-8')
-            database = shelve.open(DATABASE_FOLD + 'points_database.dat')
-            tmp = database[remark_name]
-            tmp['father'] = father_name
-            database[remark_name] = tmp
-            database.close()
-            SendMessage('@msg@%s' % (u'更改结束'), msg['FromUserName'])
-        elif re.match(u'更改昵称@.*', msg['Text']):
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            msg_list = msg['Text'].split('@')
-            remark_name = ('ltj_' + msg_list[1]).encode('utf-8')
-            nick_name = msg_list[2]
-            database = shelve.open(DATABASE_FOLD + 'points_database.dat')
-            tmp = database[remark_name]
-            tmp['nick_name'] = nick_name
-            database[remark_name] = tmp
-            database.close()
-            SendMessage('@msg@%s' % (u'调整结束'), msg['FromUserName'])
-        elif re.match(u'增加用户@.*', msg['Text']):
-            '''增加用户@ltj_xxx@昵称[@ltj_xxx（邀请人）]'''
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            msg_list = msg['Text'].split('@')
-            argc = len(msg_list)
-            remark_name = ('ltj_' + msg_list[1]).encode('utf-8')
-            nick_name = msg_list[2]
-            father_name = ''
-            if argc == 3:
-                father_name = MemberRecord().MemberRecordFindFather(nick_name)
-                if father_name < 0:
-                    father_name = ''
-                else:
-                    father_name = father_name.encode('utf-8')
-            elif argc == 4:
-                father_name = msg_list[3].encode('utf-8')
-            Database().DatabaseAddUser(remark_name, nick_name, father_name)
-            SendMessage('@msg@%s' % (u'增加用户完成'), msg['FromUserName'])
-        elif re.match(u'删除用户@.*', msg['Text']):
-            '''删除用户@ltj_xxx'''
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            msg_list = msg['Text'].split('@')
-            remark_name = ('ltj_' + msg_list[1]).encode('utf-8')
-            Database().DatabaseDelUser(remark_name)
-            SendMessage('@msg@%s' % (u'删除用户完成'), msg['FromUserName'])
-        elif msg['Text'] == u'查看线程':
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            logging.debug(str(threading.enumerate()))
-            SendMessage('@msg@%s' % (str(threading.enumerate())), msg['FromUserName'])
-        elif msg['Text'] == u'查看邀请':
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            lines = u''
-            for line in codecs.open(MEMBER_RECORD_PATH, 'rb', 'utf-8'):
-                lines = lines + line
-            lines = lines.strip()
-            SendMessage('@msg@%s' % lines, msg['FromUserName'])
-        elif re.match(u'查看数据@.*', msg['Text']):
-            msg_list = msg['Text'].split('@')
-            remark_name = 'ltj_' + msg_list[1]
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg_list[0] + u' 会员是：' + remark_name), msg['FromUserName'])
-            data_user = Database().DatabaseViewData(remark_name.encode('utf-8'))
-            if data_user:
-                SendMessage('@msg@%s' % repr(data_user), msg['FromUserName'])
-        elif msg['Text'] == u'查看用户数':
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            next_number = Database().DatabaseUserNextNumber()
-            SendMessage('@msg@%s' % (u'下一个用户编号是：' + repr(next_number)), msg['FromUserName'])
-        elif msg['Text'] == u'打开界面':
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            ui_thread = threading.Thread(target=UiMainThread)
-            ui_thread.setDaemon(True)
-            ui_thread.start()
-            ui_thread.name = 'UI thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
-            logging.debug('==== thread name is ' + ui_thread.name)
-            SendMessage('@msg@%s' % u'UI界面开启结束', msg['FromUserName'])
-        elif re.match(u'找.*',msg['Text']):
-            keyword = msg['Text'][1:]
-            SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg['Text']), msg['FromUserName'])
-            # send_to_browser_worker(keyword.encode('utf-8'))
-            SendMessage('@msg@%s' % (u'找商品结束'), msg['FromUserName'])
-
+    if text == u'上传数据':
+        SendMessage('@msg@%s' % (u'主人您好，当前命令是： %s' % text), to_name)
+        if UpdateToGit(is_robot=False, is_data=True) == 0:
+            SendMessage('@msg@%s' % (text + u' 成功'), to_name)
+        else:
+            SendMessage('@msg@%s' % (text + u' 失败'), to_name)
+    elif text == u'上传代码':
+        SendMessage('@msg@%s' % (u'主人您好，当前命令是： %s' % text), to_name)
+        if UpdateToGit(is_robot=False, is_data=False) == 0:
+            SendMessage('@msg@%s' % (text + u' 成功'), to_name)
+        else:
+            SendMessage('@msg@%s' % (text + u' 失败'), to_name)
+    elif text == u'查看线程':
+        SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + text), to_name)
+        logging.debug(str(threading.enumerate()))
+        SendMessage('@msg@%s' % (str(threading.enumerate())), to_name)
+    elif text == u'查看邀请':
+        SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + text), to_name)
+        lines = u''
+        for line in codecs.open(MEMBER_RECORD_PATH, 'rb', 'utf-8'):
+            lines = lines + line
+        lines = lines.strip()
+        SendMessage('@msg@%s' % lines, to_name)
+    elif re.match(u'查看数据@.*', text):
+        msg_list = text.split('@')
+        remark_name = 'ltj_' + msg_list[1]
+        SendMessage('@msg@%s' % (u'主人您好，当前命令是：' + msg_list[0] + u' 会员是：' + remark_name), to_name)
+        data_user = Database().DatabaseViewData(remark_name.encode('utf-8'))
+        if data_user:
+            SendMessage('@msg@%s' % repr(data_user), to_name)
+    elif text == u'测试':
+        pass
     logging.debug(u'==== 结束')
     return
 
@@ -971,6 +742,8 @@ def group_text_reply(msg):
     elif msg['Text'] == u'下一页':
         logging.debug(u'==== 收到命令，下一页')
         communicate_with_lianmeng().send_goods_to_user({'room': msg['FromUserName'], 'user': msg['ActualUserName'], 'nick': nick_name})
+    elif nick_name == MASTER_NAME and GetRoomNameByNickName(INNER_ROOM_NICK_NAME) == msg['FromUserName']:
+        master_command_router(msg['Text'], msg['FromUserName'])
     logging.debug(u'==== 结束')
     return
 
@@ -988,7 +761,6 @@ def huanying(msg):
     record_t = msg['Content'] + ' ' + msg['User']['NickName'] + '\r\n'
     MemberRecord().MemberRecordAddRecord(record_t)
 
-    time.sleep(1)
     template = Template()
     template.TemplateSendCommand(msg['FromUserName'])
     logging.debug(u'==== 结束')
@@ -1010,9 +782,7 @@ def GetRoomNameByNickName(nick_name):
     rooms = itchat.get_chatrooms()
     room_name = ''
     for i in range(len(rooms)):
-        logging.debug(rooms[i]['NickName'])
         if rooms[i]['NickName'] == nick_name:
-            logging.debug('find room')
             room_name = rooms[i]['UserName']
             break
     logging.debug(u'==== 结束')
@@ -1023,8 +793,7 @@ def SendMessageToRoom(nick_name, msg):
     room_name = GetRoomNameByNickName(nick_name)
     if room_name == '':
         logging.error(u'==== 没找到群')
-        SendMessage('@msg@%s' % (u'报告主人：没有找到群, nick_name: ' + nick_name),
-                    (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
+        SendMessage(u'报告主人：没有找到群, nick_name: ' + nick_name, 'filehelper')
         return
     else:
         SendMessage('@msg@%s' % msg, room_name)
@@ -1085,7 +854,6 @@ def SendGoodsToUser(room_name, user_name, nick_name):
     SendMessage('@msg@%s' % (u'@%s 共找到%d个商品，当前第%d页:') % (nick_name, num, (cursor/GOODS_PER_TIME)+1), to_name)
     SendMessage('@img@%s' % out_long_pic_path, to_name)
     for i in range(cursor, range_end):
-        time.sleep(0.5)
         SendMessage('@msg@%s' % ((u'商品序号:%d\n' % i) + make_text(goods_detail[str(i)])), to_name)
     if range_end != num:
         SendMessage('@msg@%s' % (u'回复【下一页】，查看下页商品'), to_name)
@@ -1096,15 +864,18 @@ def SendGoodsToUser(room_name, user_name, nick_name):
 
 @itchat.msg_register(itchat.content.FRIENDS)
 def ItchatMessageFriend(msg):
-    p = threading.Thread(target=be_add_friend, args=(msg,))
-    p.name = 'ItchatMessageFriend ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
-    p.setDaemon(True)
-    p.start()
-    logging.debug('==== thread name is ' + p.name + ' nick name is ' + msg['RecommendInfo']['NickName'])
-    return
+    pass
+    # p = threading.Thread(target=be_add_friend, args=(msg,))
+    # p.name = 'ItchatMessageFriend ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
+    # p.setDaemon(True)
+    # p.start()
+    # logging.debug('==== thread name is ' + p.name + ' nick name is ' + msg['RecommendInfo']['NickName'])
+    # return
 
 @itchat.msg_register(itchat.content.NOTE, isGroupChat=True)
 def ItchatMessageNoteGroup(msg):
+    if msg['FromUserName'] not in monitor_room_user_name:
+        return
     p = threading.Thread(target=huanying, args=(msg,))
     p.name = 'ItchatMessageNoteGroup ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
     p.setDaemon(True)
@@ -1114,6 +885,8 @@ def ItchatMessageNoteGroup(msg):
 
 @itchat.msg_register(itchat.content.TEXT, isGroupChat=True)
 def ItchatMessageTextGroup(msg):
+    if msg['FromUserName'] not in monitor_room_user_name:
+        return
     p = threading.Thread(target=group_text_reply, args=(msg,))
     p.name = 'ItchatMessageTextGroup ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
     p.setDaemon(True)
@@ -1123,15 +896,7 @@ def ItchatMessageTextGroup(msg):
 
 @itchat.msg_register(itchat.content.TEXT)
 def ItchatMessageTextSingle(msg):
-    p = threading.Thread(target=single_text_reply, args=(msg,))
-    p.name = 'ItchatMessageTextSingle ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
-    p.setDaemon(True)
-    p.start()
-    if 'NickName' in msg['User']:
-        logging.debug('==== thread name is ' + p.name + ' nick name is ' + msg['User']['NickName'])
-    else:
-        logging.debug('==== thread name is ' + p.name + ' no nick name')
-    return
+    pass
 
 ################ UI界面相关 #################
 
@@ -1177,14 +942,6 @@ class MyTable(wx.grid.PyGridTableBase):
 
     def GetAttr(self,row,col,kind):
         pass
-
-    # def UpdateMyData(self):
-    #     global database_data
-    #     global labels, col_labels, row_labels
-    #     database_data = Database().DatabaseGetAllData()
-    #     labels = Database().DatabaseGetLabels()
-    #     col_labels = labels[1]
-    #     row_labels = labels[0]
 
 class MyFrame(wx.Frame):
     def __init__(self):
@@ -1247,7 +1004,6 @@ class MyFrame(wx.Frame):
         self.grid = wx.grid.Grid(self.panel_r)
         self.table = MyTable()
         self.grid.SetTable(self.table,True)
-        # self.grid.Enable(False)
         self.grid.AutoSize()
         button4 = wx.Button(self.panel_r, -1, u'更新', size=(80, 30))
         self.panel_r.Bind(wx.EVT_BUTTON, self.OnButton4Click, button4)
@@ -1281,7 +1037,6 @@ class MyFrame(wx.Frame):
                 IntegralRecord().IntegralRecordOrderRecord(remark, number)
                 SendMessage('@msg@%s' % (u'亲，您的订单【' + number + u'】积分已录入，当前积分为：' + repr(cur_points)),
                             (itchat.search_friends(remarkName=remark)[0]['UserName']))
-                # self.table.UpdateMyData()
                 self.table = MyTable()
                 self.grid.SetTable(self.table, True)
                 self.grid.AutoSize()
@@ -1314,7 +1069,6 @@ class MyFrame(wx.Frame):
                     SendMessageToRoom(ROOM_NICK_NAME,
                                       u'@' + itchat.search_friends(remarkName=remark)[0]['NickName'] +
                                       u' 成功兑换积分商品')
-                    # self.table.UpdateMyData()
                     self.table = MyTable()
                     self.grid.SetTable(self.table, True)
                     self.grid.AutoSize()
@@ -1329,7 +1083,6 @@ class MyFrame(wx.Frame):
 
     def OnButton4Click(self, event):
         logging.debug(u'==== 开始')
-        # self.table.UpdateMyData()
         self.table = MyTable()
         self.grid.SetTable(self.table, True)
         self.grid.AutoSize()
@@ -1351,7 +1104,6 @@ class MyFrame(wx.Frame):
             else:
                 user_data[a] = tmp.encode('utf-8')
         Database().DatabaseWriteData(remark_name, user_data)
-        # self.table.UpdateMyData()
         self.table = MyTable()
         self.grid.SetTable(self.table, True)
         self.grid.AutoSize()
@@ -1370,7 +1122,6 @@ class MyFrame(wx.Frame):
                 logging.info(u'==== 用户删除成功')
             else:
                 logging.info(u'==== 删除用户失败')
-            # self.table.UpdateMyData()
             self.table = MyTable()
             self.grid.SetTable(self.table, True)
             self.grid.AutoSize()
@@ -1394,7 +1145,6 @@ class MyFrame(wx.Frame):
             SendMessageToRoom(ROOM_NICK_NAME,
                               u'@' + itchat.search_friends(remarkName=remark)[0]['NickName'] +
                               u' 活动奖励积分已录入')
-            # self.table.UpdateMyData()
             self.table = MyTable()
             self.grid.SetTable(self.table, True)
             self.grid.AutoSize()
@@ -1481,7 +1231,7 @@ def UpdateToGit(is_robot=True, is_data=True):
             logging.error(u'==== 上传失败 error:' + repr(ret) + u' cnt:' + repr(cnt))
             if cnt >= 3:
                 logging.error(u'==== GIT上传失败')
-                SendMessage('@msg@%s' % u'报告主人：GIT上传失败', (itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']))
+                SendMessage(u'报告主人：GIT上传失败', 'filehelper')
                 return -1
 
 def GitUpdateThread():
@@ -1530,15 +1280,14 @@ class communicate_with_lianmeng:
                 elif msg['result'] <= RETRY_TIME_OUT:
                     SendMessage('@msg@%s' % ((u'@%s 网络出了些问题，稍后再试吧') % msg['nick']), msg['room'])
             else:
-                master_name = itchat.search_friends(remarkName=u'ltj_1')[0]['UserName']
                 if type == 'login':
-                    SendMessage('@msg@%s' % u'请登录淘宝账号', master_name)
-                    SendMessage('@img@%s' % msg, master_name)
+                    SendMessage(u'请登录淘宝账号', 'filehelper')
+                    SendMessage('@img@%s' % msg, 'filehelper')
                 elif type == 'result':
                     if msg == 'success':
-                        SendMessage('@msg@%s' % u'淘宝登录成功', master_name)
+                        SendMessage(u'淘宝登录成功', 'filehelper')
                     elif msg == 'fail':
-                        SendMessage('@msg@%s' % u'淘宝登录失败', master_name)
+                        SendMessage(u'淘宝登录失败', 'filehelper')
 
     def create_receive_from_lianmeng_thread(self):
         thread = threading.Thread(target=self.receive_from_lianmeng_thread,)
@@ -1566,14 +1315,11 @@ class communicate_with_main:
                 if msg == 'UI':
                     logging.debug(u'开始创建UI线程')
                     CreateUiThread()
-                # if msg == u'下一页':
-                #     print u'WeChat，收到命令，下一页'
-                #     communicate_with_lianmeng().send_goods_to_user({'room':'default', 'user':'123456', 'nick':'Rickey'})
 
 def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     logging.info(u'wechat_main: 进程开始')
     logging.info(u'wechat_main: 创建GIT线程')
-    CreateGitThread()
+    # CreateGitThread()
     logging.info(u'wechat_main: 创建接收main进程命令的线程')
     communicate_with_main.q_out = q_wechat_main
     communicate_with_main.q_in = q_main_wechat
@@ -1583,8 +1329,8 @@ def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wech
     communicate_with_lianmeng.q_in = q_lianmeng_wechat
     communicate_with_lianmeng().create_receive_from_lianmeng_thread()
 
-    # while True:
-    #     time.sleep(50)
-    itchat.auto_login()
+    itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=True)
+    for room in MONITOR_ROOM_LIST:
+        monitor_room_user_name.append(GetRoomNameByNickName(room))
     communicate_with_lianmeng.wechat_login_ok = True
     itchat.run()
