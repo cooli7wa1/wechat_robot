@@ -130,6 +130,7 @@ class browser:
                         logging.debug(u'登录成功')
                         os.remove(code_image_path)
                         self.retry_time = 0
+                        self.q_out.put(('result', 'success'))
                         return SUCCESS
                     else:
                         times +=1
@@ -137,6 +138,7 @@ class browser:
                             logging.debug(u'超过一分钟未登录，登录失败')
                             os.remove(code_image_path)
                             self.retry_time = 0
+                            self.q_out.put(('result', 'fail'))
                             return LM_LOG_IN_TIME_OUT
             else:
                 logging.debug(u'不用再次登录')
