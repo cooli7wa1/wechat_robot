@@ -6,6 +6,8 @@ import pymongo
 import wx.grid
 from copy import deepcopy
 from PIL import Image, ImageDraw, ImageFont
+from bson import ObjectId
+
 from wechat_config import *
 import sys
 reload(sys)
@@ -39,6 +41,7 @@ def SendMessage(msg, user):
     '''另起线程发送消息，默认等待3秒，如果还未结束，就强制结束，并重发，一共重发3次
     三次重发内成功，返回0，失败返回-1'''
     send_message_lock.acquire()
+    time.sleep(random.choice(SEND_MESSAGE_DELAY))
     logging.debug('==== 开始')
     try:
         cnt1 = 0
@@ -63,7 +66,6 @@ def SendMessage(msg, user):
             if cnt1 >= SEND_TIMES:
                 return -1
     finally:
-        time.sleep(1)
         send_message_lock.release()
         logging.debug('==== 结束')
 
@@ -104,7 +106,7 @@ def log_and_send_error_msg(title='', detail='', reason=''):
     func_name = stack[1][3]
     lineno = stack[1][2]
     logging.error('[%s][%s]\r\nTitle: %s\r\nDetail: %s\r\nReason: %s' % (func_name, lineno, title, detail, reason))
-    itchat.send('@msg@%s' % ('错误\nTitle: %s\nDetail: %s' % (title, detail)), 'filehelper')
+    SendMessageToRoom(INNER_ROOM_NICK_NAME, '@msg@%s' % ('错误\nTitle: %s\nDetail: %s' % (title, detail)))
 
 def username_link_to_db(user_name, nick_name):
     if user_name in UserName_InnerId:
@@ -226,6 +228,25 @@ class Database:
         else:
             return SUCCESS
 
+    def __DatabaseChangeFahterPoints(self, father_innerid, child_nick_name, child_change_points):
+        logging.debug('==== 开始')
+        father_info = self.DatebaseGetInfoByInnerId(father_innerid)
+        father_nick_name = father_info[u'NickName']
+        father_zhifubao = father_info[u'AliInfo'][u'ZhiFuBaoZH']
+        father_points_change = int(round(child_change_points * FATHER_REWARD_PROP / 100.0))
+        father_points_old = father_info[u'Points']
+        father_points_new = father_points_old + father_points_change
+        self.db_table_wechat_users.update_one({u'InnerId': father_innerid},
+                                              {"$set": {u'Points': father_points_new}})
+        IntegralRecord().IntegralRecordAddRecord(father_innerid, u'好友奖励积分', 'None', 'None',
+                                                 str(father_points_change), str(father_points_new))
+        SendMessageToRoom(TARGET_ROOM, '@msg@%s' %
+                          ('@%s 亲，您邀请的好友【%s】，给您带来了【%s】积分的奖励\n'
+                           '您的支付宝账号(%s)的当前积分为：%s' % (
+                               father_nick_name, child_nick_name, str(father_points_change), father_zhifubao,
+                               str(father_points_new))))
+        logging.debug('==== 结束')
+
     def DatabaseChangePoints(self, inner_id, points):
         logging.debug('==== 开始')
         logging.debug('==== InnerId %s, Points %d' % (inner_id, points))
@@ -240,6 +261,9 @@ class Database:
             self.db_table_wechat_users.update_one({u'InnerId': inner_id},
                                  {"$set": {u'Points': p}})
             logging.debug('==== After: %s' % self.db_table_wechat_users.find({u'InnerId':inner_id}).next())
+            # add points to father
+            if info[u'Father'] and points > 0:
+                self.__DatabaseChangeFahterPoints(info[u'Father'], info[u'NickName'], points)
             return SUCCESS
         finally:
             logging.debug('==== 结束')
@@ -260,6 +284,10 @@ class Database:
             self.db_table_wechat_users.update_one({u'InnerId': inner_id},
                                                   {"$set": {u'Points': p, u'LastCheckIn':today}})
             logging.debug('==== After: %s' % self.db_table_wechat_users.find({u'InnerId':inner_id}).next())
+            IntegralRecord().IntegralRecordAddRecord(inner_id, u'签到', 'None', 'None', str(CHECK_IN_POINTS), str(p))
+            # add points to father
+            if info[u'Father']:
+                self.__DatabaseChangeFahterPoints(info[u'Father'], info[u'NickName'], CHECK_IN_POINTS)
             return SUCCESS
         finally:
             logging.debug('==== 结束')
@@ -298,6 +326,13 @@ class Database:
             if ret < 0:
                 return ret
             self.db_table_wechat_users.insert(user_data)
+            if user_data[u'Father']:
+                father_info = self.DatebaseGetInfoByInnerId(user_data[u'Father'])
+                father_nick_name = father_info[u'NickName']
+                SendMessageToRoom(TARGET_ROOM, '@msg@%s' %
+                                  ('@%s 亲，您邀请的好友【%s】与您绑定成功\n'
+                                   '每当好友获得积分，您也将会获得积分奖励' % (
+                                       father_nick_name, user_data['NickName'])))
             return SUCCESS
         finally:
             logging.debug('==== 结束')
@@ -460,8 +495,16 @@ class Template:
         logging.debug('==== 开始')
         try:
             today = time.strftime('%Y%m%d', time.localtime(time.time()))
-            pic_path = INTEGRAL_GOOD_FOLD + today + '_stitch.jpg'
-            text_path = INTEGRAL_GOOD_FOLD + today + '_stitch.txt'
+            pic_file_name = today + '_stitch.jpg'
+            text_file_name = today + '_stitch.txt'
+            pic_path = INTEGRAL_GOOD_FOLD + pic_file_name
+            text_path = INTEGRAL_GOOD_FOLD + text_file_name
+            # 清理旧的长图和文本
+            files_list = os.listdir(INTEGRAL_GOOD_FOLD)
+            for file in files_list:
+                if file.endswith(('_stitch.jpg', '_stitch.txt')):
+                    if file != pic_file_name and file != text_file_name:
+                        os.remove(INTEGRAL_GOOD_FOLD + file)
             if os.path.exists(pic_path) and os.path.exists(text_path):
                 self.__TemplateSendPicAndText(pic_path, text_path, to)
                 return
@@ -553,6 +596,26 @@ class IntegralRecord:
 class MemberRecord:
     member_record_mutex = threading.Lock()  # 邀请记录的同步锁
 
+    def MemberRecordFindFather(self, nick_name):
+        logging.debug('==== 开始')
+        try:
+            for line in codecs.open(MEMBER_RECORD_PATH, 'r', 'utf-8'):
+                line_list = line.split('"')
+                if line_list[3] == nick_name:
+                    father = line_list[1]
+                    if father.startswith(u'ltj_'):
+                        return father
+                    else:
+                        ret = Database().DatabaseSearch(father)
+                        if ret < 0:
+                            logging.debug('==== 未找到father，nick_name: %s' % nick_name)
+                            return WECHAT_NOT_FIND_FATHER
+                        return ret['InnerId']
+            logging.debug('==== 未找到father，nick_name: %s' % nick_name)
+            return WECHAT_NOT_FIND_FATHER
+        finally:
+            logging.debug('==== 结束')
+
     def MemberRecordAddRecord(self, record):
         MemberRecord.member_record_mutex.acquire()
         logging.debug('==== 开始')
@@ -574,8 +637,6 @@ def user_check_in(user_name, nick_name):
         ret = Database().DatabaseCheckin(inner_id)
         if ret < 0:
             return ret
-        cur_points = Database().DatabaseViewPoints(inner_id)
-        IntegralRecord().IntegralRecordAddRecord(inner_id, u'签到', 'None', 'None', str(CHECK_IN_POINTS), str(cur_points))
         logging.debug('==== 签到成功')
         return SUCCESS
     finally:
@@ -603,7 +664,6 @@ def get_member_info(room_user_name, member_user_name=u'', member_nick_name=u''):
     '''
     try:
         logging.debug('==== 开始')
-        logging.debug('==== nick_name: %s' % member_nick_name)
         itchat.update_chatroom(userName=room_user_name, detailedMember=True)
         room = itchat.search_chatrooms(userName=room_user_name)
         member_list = room[u'MemberList']
@@ -716,7 +776,7 @@ def master_command_router(msg):
         cmd, zhifubao, real_nick_name, inner_id = text.split('#')
         SendMessage('@msg@%s' % ('主人您好，收到命令：%s，正在处理..' % text), to_name)
         # 获取群内显示的nick_name
-        room_user_name = GetRoomNameByNickName(INNER_ROOM_NICK_NAME)
+        room_user_name = GetRoomNameByNickName(TARGET_ROOM)
         info = get_member_info(room_user_name, member_nick_name=real_nick_name)
         nick_name = info[u'DisplayName'] if info[u'DisplayName'] else info[u'NickName']
         if cmd == u'更新设置':
@@ -743,7 +803,7 @@ def master_command_router(msg):
         cmd, zhifubao, real_nick_name = text.split('#')
         SendMessage('@msg@%s' % ('主人您好，收到命令：%s，正在处理..' % text), to_name)
         # 获取群内显示的nick_name
-        room_user_name = GetRoomNameByNickName(INNER_ROOM_NICK_NAME)
+        room_user_name = GetRoomNameByNickName(TARGET_ROOM)
         info = get_member_info(room_user_name, member_nick_name=real_nick_name)
         if not info:
             SendMessage('@msg@%s' % ('获取群内昵称失败，输入的应该是真实昵称，不是群内或者备注昵称：%s' % real_nick_name), to_name)
@@ -763,7 +823,10 @@ def master_command_router(msg):
         elif cmd == u'新':
             next_id_num = Database().DatabaseUserNextNumber()
             inner_id = u'ltj_' + str(next_id_num)
-            user_data = UserData(NickName=nick_name, InnerId=inner_id, ZhiFuBaoZH=zhifubao).Get()
+            father = MemberRecord().MemberRecordFindFather(nick_name)
+            if father < 0:
+                father = u''
+            user_data = UserData(NickName=nick_name, InnerId=inner_id, ZhiFuBaoZH=zhifubao, Father=father).Get()
             ret = Database().DatabaseAddUser(user_data)
             if ret < 0:
                 if ret == WECHAT_ZHIFUBAO_NICKNAME_BOTH_EXIST:
@@ -805,7 +868,7 @@ def group_text_reply(msg):
         logging.debug('==== 来自：%s，聊天内容：%s' % (nick_name, msg[u'Text']))
         text_command_router(msg, nick_name)
     elif re.match(u'找 .*', msg[u'Text']):
-        key_word = msg[u'Text'][2:]
+        key_word = msg[u'Text'][2:].strip()
         logging.debug('==== 来自：%s，收到查找商品命令: %s' % (nick_name, msg[u'Text']))
         SendMessage('@msg@%s' % ('@%s 正在为您查找商品【%s】，请稍等...' % (nick_name, key_word)), msg[u'FromUserName'])
         package = communicate_with_lianmeng().make_package(room=msg[u'FromUserName'], user=msg[u'ActualUserName'], nick=nick_name, keyword=key_word)
@@ -828,6 +891,7 @@ def huanying(msg):
     logging.debug('==== ' + msg['Content'] + ' ' + msg['User']['NickName'])
     logging.debug(msg)
     SendMessage('@msg@%s' % ('欢迎亲加入【乐淘家】'), msg['FromUserName'])
+    Template().TemplateSendCommand(msg['FromUserName'])
 
     record_t = msg['Content'] + ' ' + msg['User']['NickName'] + '\r\n'
     MemberRecord().MemberRecordAddRecord(record_t)
@@ -849,15 +913,15 @@ def GetRoomNameByNickName(room_nick_name):
     return room_name
 
 def SendMessageToRoom(nick_name, msg):
-    logging.debug(u'==== 开始')
+    logging.debug('==== 开始')
     room_name = GetRoomNameByNickName(nick_name)
     if room_name == '':
-        logging.error(u'==== 没找到群')
-        SendMessage(u'报告主人：没有找到群, nick_name: ' + nick_name, u'filehelper')
+        logging.error('==== 没找到群')
+        SendMessage('报告主人：没有找到群, nick_name: ' + nick_name, u'filehelper')
         return
     else:
-        SendMessage('@msg@%s' % msg, room_name)
-    logging.debug(u'==== 结束')
+        SendMessage(msg, room_name)
+    logging.debug('==== 结束')
     return
 
 def make_text(dict):
@@ -919,6 +983,10 @@ def SendGoodsToUser(room_name, user_name, nick_name):
         SendMessage('@msg@%s' % ('回复【下一页】，查看下页商品'), to_name)
     # 发送成功之后，更新cursor
     db_table.update_one({'user': user_name}, {"$set": {u'goods.cursor': range_end}})
+    # 删除用过的图片
+    for pic in pictures:
+        os.remove(pic)
+    os.remove(out_long_pic_path)
 
 @itchat.msg_register(itchat.content.FRIENDS)
 def ItchatMessageFriend(msg):
@@ -1097,9 +1165,9 @@ class MyFrame(wx.Frame):
             info = Database().DatebaseGetInfoByInnerId(inner_id)
             nick_name = info[u'NickName']
             zhifubao_mark = AccountMark(info[u'AliInfo'][u'ZhiFuBaoZH'])
-            SendMessageToRoom(INNER_ROOM_NICK_NAME,
-                              '@%s 亲，您的订单【%s】积分已录入\n'
-                              '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, number, zhifubao_mark, repr(cur_points)))
+            SendMessageToRoom(TARGET_ROOM,
+                              '@msg@%s' % ('@%s 亲，您的订单【%s】积分已录入\n'
+                              '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, number, zhifubao_mark, repr(cur_points))))
             # self.table = MyTable()
             # self.grid.SetTable(self.table, True)
             # self.grid.AutoSize()
@@ -1133,9 +1201,9 @@ class MyFrame(wx.Frame):
                     info = Database().DatebaseGetInfoByInnerId(inner_id)
                     nick_name = info[u'NickName']
                     zhifubao_mark = AccountMark(info[u'AliInfo'][u'ZhiFuBaoZH'])
-                    SendMessageToRoom(INNER_ROOM_NICK_NAME,
-                                      '@%s 亲，您已成功兑换积分商品【%s】\n'
-                                      '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, jp_num, zhifubao_mark, repr(cur_points)))
+                    SendMessageToRoom(TARGET_ROOM,
+                                      '@msg@%s' % ('@%s 亲，您已成功兑换积分商品【%s】\n'
+                                      '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, jp_num, zhifubao_mark, repr(cur_points))))
                     # self.table = MyTable()
                     # self.grid.SetTable(self.table, True)
                     # self.grid.AutoSize()
@@ -1210,9 +1278,9 @@ class MyFrame(wx.Frame):
             info = Database().DatebaseGetInfoByInnerId(inner_id)
             nick_name = info[u'NickName']
             zhifubao_mark = AccountMark(info[u'AliInfo'][u'ZhiFuBaoZH'])
-            SendMessageToRoom(INNER_ROOM_NICK_NAME,
-                              '@%s 亲，活动奖励积分【%s】已录入\n'
-                              '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, integral, zhifubao_mark, repr(cur_points)))
+            SendMessageToRoom(TARGET_ROOM,
+                              '@msg@%s' % ('@%s 亲，活动奖励积分【%s】已录入\n'
+                              '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, integral, zhifubao_mark, repr(cur_points))))
             # self.table = MyTable()
             # self.grid.SetTable(self.table, True)
             # self.grid.AutoSize()
@@ -1301,6 +1369,58 @@ def UpdateToGit(is_robot=True, is_data=True):
                 log_and_send_error_msg('GIT上传失败')
                 return -1
 
+def CleanThread():
+    while True:
+        logging.debug('==== CLEAN THREAD 开始清理数据')
+        # clean pic
+        logging.debug('==== CLEAN THREAD 正在清理过期搜索记录和图片')
+        time_ori = int(time.time())
+        db_table = pymongo.MongoClient(MONGO_URL, connect=False)[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_GOODS]
+        cursor = db_table.find({})
+        if cursor.count() != 0:
+            for info in cursor:
+                if info['goods']['search_time_ori'] <= time_ori - SEARCH_CLEAN_TIME_INTERVAL:
+                    # del pic in old info
+                    for good in info['goods']['goods_detail'].items():
+                        path = good[1][u'主图存储路径']
+                        if os.path.exists(path):
+                            os.remove(path)
+                    if 'long_pic' in info['goods']:
+                        for pic in info['goods']['long_pic'].items():
+                            path = pic[1]
+                            if os.path.exists(path):
+                                os.remove(path)
+                    # del info self
+                    db_table.delete_one({'_id': ObjectId(info['_id'])})
+        # clean log
+        logging.debug('==== CLEAN THREAD 正在清理过期LOG')
+        log_files = os.listdir(LOG_FOLD)
+        for file in log_files:
+            if int(file.split('_')[1]) < time_ori - LOG_CLEAN_TIME_INTERVAL:
+                os.remove(LOG_FOLD+file)
+        # clean codeimage, 只保留最后一个
+        logging.debug('==== CLEAN THREAD 正在清理残留的codeimage')
+        image_files = os.listdir(CODE_IMAGE_FOLD_PATH)
+        reserve_file = ''
+        for file in image_files:
+            if file.startswith('codeimage'):
+                if not reserve_file:
+                    reserve_file = file
+                    continue
+                if file > reserve_file:
+                    os.remove(CODE_IMAGE_FOLD_PATH + reserve_file)
+                    reserve_file = file
+
+        logging.debug('==== CLEAN THREAD 结束')
+        time.sleep(CLEAN_THREAD_INTERVAL)
+
+def CreateCleanThread():
+    git_thread = threading.Thread(target=CleanThread)
+    git_thread.setDaemon(True)
+    git_thread.start()
+    git_thread.name = u'Clean thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
+    logging.debug('==== thread name is ' + git_thread.name.encode('utf-8'))
+
 def GitUpdateThread():
     while True:
         UpdateToGit()
@@ -1316,7 +1436,6 @@ def CreateGitThread():
 class communicate_with_lianmeng:
     q_out = None
     q_in = None
-    wechat_login_ok = False
     def make_package(self, room, user, nick, keyword):
         d = {u'room': room, u'user': user, u'nick': nick, u'keyword': keyword}
         return d
@@ -1333,9 +1452,6 @@ class communicate_with_lianmeng:
 
     def receive_from_lianmeng_thread(self):
         while True:
-            while not self.wechat_login_ok:
-                logging.debug('等待wechat登录')
-                time.sleep(2)
             logging.info('开始接收来自lianmeng进程命令')
             type, msg = self.q_in.get()
             logging.debug('收到lianmeng进程命令, %s %s' % (type, msg))
@@ -1348,13 +1464,13 @@ class communicate_with_lianmeng:
                     SendMessage('@msg@%s' % (('@%s 网络出了些问题，稍后再试吧') % msg[u'nick']), msg[u'room'])
             else:
                 if type == u'login':
-                    SendMessage('请登录淘宝账号', 'filehelper')
-                    SendMessage('@img@%s' % msg, 'filehelper')
+                    SendMessageToRoom(INNER_ROOM_NICK_NAME, '@msg@%s' % '请登录淘宝账号')
+                    SendMessageToRoom(INNER_ROOM_NICK_NAME, '@img@%s' % msg)
                 elif type == u'result':
                     if msg == u'success':
-                        SendMessage('淘宝登录成功', 'filehelper')
+                        SendMessageToRoom(INNER_ROOM_NICK_NAME, '@msg@%s' % '淘宝登录成功')
                     elif msg == u'fail':
-                        SendMessage('淘宝登录失败', 'filehelper')
+                        SendMessageToRoom(INNER_ROOM_NICK_NAME, '@msg@%s' % '淘宝登录失败')
 
     def create_receive_from_lianmeng_thread(self):
         thread = threading.Thread(target=self.receive_from_lianmeng_thread,)
@@ -1383,22 +1499,34 @@ class communicate_with_main:
                     logging.debug('开始创建UI线程')
                     CreateUiThread()
 
-def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
-    logging.info('wechat_main: 进程开始')
-    logging.info('wechat_main: 创建GIT线程')
-    # CreateGitThread()
-    logging.info('wechat_main: 创建接收main进程命令的线程')
+def init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
+    logging.info('init_thread: 创建GIT线程')
+    CreateGitThread()
+    logging.info('init_thread: 创建CLEAN线程')
+    CreateCleanThread()
+    logging.info('init_thread: 创建接收main进程命令的线程')
     communicate_with_main.q_out = q_wechat_main
     communicate_with_main.q_in = q_main_wechat
     communicate_with_main().create_receive_from_main_thread()
-    # logging.info('wechat_main: 创建接收lianmeng进程命令的线程')
-    # communicate_with_lianmeng.q_out = q_wechat_lianmeng
-    # communicate_with_lianmeng.q_in = q_lianmeng_wechat
-    # communicate_with_lianmeng().create_receive_from_lianmeng_thread()
-
-    # itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=True)
-    itchat.auto_login(hotReload=True)
+    # 等待微信初始化
+    time.sleep(2)
     for room in MONITOR_ROOM_LIST:
         monitor_room_user_name.append(GetRoomNameByNickName(room))
-    communicate_with_lianmeng.wechat_login_ok = True
+    logging.info('init_thread: 创建接收lianmeng进程命令的线程')
+    communicate_with_lianmeng.q_out = q_wechat_lianmeng
+    communicate_with_lianmeng.q_in = q_lianmeng_wechat
+    communicate_with_lianmeng().create_receive_from_lianmeng_thread()
+
+def create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
+    thread = threading.Thread(target=init_thread, args=(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat))
+    thread.setDaemon(True)
+    thread.start()
+    thread.name = 'init_thread thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
+    logging.debug('==== thread name is ' + thread.name)
+
+def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
+    logging.info('wechat_main: 进程开始')
+    itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=True)
+    logging.info('wechat_main: 创建init进程开始')
+    create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat)
     itchat.run()

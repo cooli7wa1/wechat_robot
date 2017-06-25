@@ -26,6 +26,7 @@ def movedb(room_name):
                 user_data[u'NickName'] = members_list[i][u'DisplayName'] if members_list[i][u'DisplayName'] else members_list[i][u'NickName']
                 find_nick = True
         if not find_nick:
+            user_data[u'NickName'] = user_data_tmp[u'nick_name']
             print u'未找到 %s' % user_data_tmp[u'nick_name']
         user_data[u'InnerId'] = user.decode('utf-8')
         user_data[u'Group'] = user_data_tmp[u'group']

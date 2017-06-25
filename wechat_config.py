@@ -1,6 +1,5 @@
 #coding:utf-8
 from common_config import *
-import threading
 
 os_documents_path = os.popen('echo $HOME').read().replace('\n','') + u'/Documents/'
 ORDER_FILE_PATH = os_documents_path + u'robot_data/xiaoyezi/integral_record/order_file.txt'
@@ -27,8 +26,14 @@ ROOM_NICK_NAME = u'\U0001f49d【乐淘家】淘天猫内部优惠精选\U0001f49
 MONITOR_ROOM_LIST = [INNER_ROOM_NICK_NAME, ROOM_NICK_NAME]  # 监控的群的nick_name
 monitor_room_user_name = []  # 监控的群的user_name
 GOODS_PER_TIME = 3  # 找商品时每次发送的商品数量
-MASTER_NAME = u'Rickey'
-GROUP_USER_NUMBER_INNERID = u'ltj_0'
+MASTER_NAME = u'Rickey'  # MASTER，暂时不用
+GROUP_USER_NUMBER_INNERID = u'ltj_0'  # 内部编号记录者
+SEND_MESSAGE_DELAY = [1.5,1.6,1.7,1.8,1.9,2.0]  # 每次发送消息前的随机延迟
+FATHER_REWARD_PROP = 20  # 父会员获得积分奖励的比例%
+TARGET_ROOM = ROOM_NICK_NAME  # 非回复性消息的发送位置，也是群成员信息的获取位置，可以设成内部群或真实群
+SEARCH_CLEAN_TIME_INTERVAL = 60*30  # 30分钟，超过时间间隔的搜索记录会被清楚，包括图片
+LOG_CLEAN_TIME_INTERVAL = 60*60*24*2  # 2天，超过时间间隔的LOG会被清楚
+CLEAN_THREAD_INTERVAL = 60*10  # 10分钟，CLEAN Thread 每隔一段唤醒一次
 
 label_ddlr = u"会员名 订单编号 订单价格 佣金比例".split()
 label_jfdh = u"会员名 商品编号 商品价格 订单编号".split()

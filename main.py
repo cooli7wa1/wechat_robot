@@ -22,9 +22,9 @@ if __name__ == '__main__':
     # p_wechat.daemon = True
     p_wechat.start()
 
-    # p_lianmeng = Process(target=lianmeng_main, name='lianmeng_main', args=(q_wechat_lianmeng, q_lianmeng_wechat,))
-    # p_lianmeng.daemon = True
-    # p_lianmeng.start()
+    p_lianmeng = Process(target=lianmeng_main, name='lianmeng_main', args=(q_wechat_lianmeng, q_lianmeng_wechat,))
+    p_lianmeng.daemon = True
+    p_lianmeng.start()
 
     os_home = os.popen('echo $HOME').read().replace('\n', '')
     if not os_home == u'/root':
@@ -33,6 +33,18 @@ if __name__ == '__main__':
             msg = raw_input('enter cmd: ').decode('utf-8')
             if msg == 'UI':
                 q_main_wechat.put(('cmd', msg))
+            elif msg == 'RS':
+                p_lianmeng.terminate()
+                while p_lianmeng.is_alive():
+                    time.sleep(0.5)
+                    print '等待终止进程'
+                print '已经终止进程'
+                time.sleep(2)
+                print '重启联盟进程'
+                p_lianmeng = Process(target=lianmeng_main, name='lianmeng_main',
+                                     args=(q_wechat_lianmeng, q_lianmeng_wechat,))
+                p_lianmeng.daemon = True
+                p_lianmeng.start()
             else:
                 pass
     else:

@@ -160,7 +160,9 @@ class browser:
             logging.debug(u'点击“选取全页商品”')
             self.wait.until(EC.element_to_be_clickable((By.CLASS_NAME, 'select-all'))).click()
             logging.debug(u'等待数量更新')
-            self.wait.until(EC.text_to_be_present_in_element((By.CSS_SELECTOR, '#J_bar_selected > strong'), str(SEARCH_PER_PAGE_SIZE)))
+            doc = pq(self.browser.page_source).remove_namespaces()
+            goods_num = doc('div.search-result-wrap').find('.block-search-box').length
+            self.wait.until(EC.text_to_be_present_in_element((By.CSS_SELECTOR, '#J_bar_selected > strong'), str(goods_num)))
             logging.debug(u'点击“加入选品库”')
             self.browser.find_element_by_class_name('add-selection').click()
             logging.debug(u'等待推广窗口出现')
@@ -206,12 +208,25 @@ class browser:
 
     def __save_to_mongo(self, goods_detail):
         goods = {}
-        cur_time = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
+        time_ori = int(time.time())
+        cur_time = time.strftime('%Y%m%d-%H%M%S', time.localtime(time_ori))
         goods['search_time'] = cur_time
+        goods['search_time_ori'] = time_ori
         goods['cursor'] = 0
         goods['goods_detail'] = goods_detail
         cursor = self.db_table_search_goods.find({'user': self.package['user']})
         if cursor.count() == 1:
+            # del old pic
+            info = cursor.next()
+            for good in info['goods']['goods_detail'].items():
+                path = good[1][u'主图存储路径']
+                if os.path.exists(path):
+                    os.remove(path)
+            if 'long_pic' in info['goods']:
+                for pic in info['goods']['long_pic'].items():
+                    path = pic[1]
+                    if os.path.exists(path):
+                        os.remove(path)
             self.db_table_search_goods.update_one({'user': self.package['user']},
                                      {"$set": {'nick': self.package['nick'],
                                                'goods': goods}})
