@@ -646,7 +646,10 @@ def user_check_in(user_name, nick_name):
 def user_view_points(user_name, nick_name):
     try:
         logging.debug('==== 开始')
-        inner_id = username_link_to_db(user_name, nick_name)[u'InnerId']
+        ret  = username_link_to_db(user_name, nick_name)
+        if ret < 0:
+            return ret
+        inner_id = ret[u'InnerId']
         if inner_id < 0:
             return inner_id
         cur_points = Database().DatabaseViewPoints(inner_id)
@@ -756,8 +759,6 @@ def master_command_router(msg):
     logging.debug('==== 开始')
     to_name = msg['FromUserName']
     text = msg['Text']
-    a = [text]
-    print a
     if text == u'上传数据':
         SendMessage('@msg@%s' % ('主人您好，当前命令是： %s' % text), to_name)
         if UpdateToGit(is_robot=False, is_data=True) == 0:
