@@ -20,8 +20,8 @@ class BrowserException(Exception):
 class browser:
     def __init__(self, q_lianmeng_wechat, q_wechat_lianmeng):
         self.client = pymongo.MongoClient(MONGO_URL, connect=False)
-        self.db_table = self.client[MONGO_DB][MONGO_TABLE]
-        self.db_table_search = self.client[MONGO_DB][MONGO_TABLE_SEARCH]
+        self.db_table_search_goods = self.client[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_GOODS]
+        self.db_table_search_history = self.client[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_HISTORY]
         self.options = webdriver.ChromeOptions()
         self.options.add_argument('headless')
         self.options.add_argument('disable-gpu')
@@ -34,11 +34,11 @@ class browser:
         self.package = {}
         self.retry_time = 0
 
-    def __print_qr(self, fileDir):
-        if platform.system() == 'Linux':
-            subprocess.call(['xdg-open', fileDir])
-        else:
-            os.startfile(fileDir)
+    # def __print_qr(self, fileDir):
+    #     if platform.system() == 'Linux':
+    #         subprocess.call(['xdg-open', fileDir])
+    #     else:
+    #         os.startfile(fileDir)
     
     def __click_must_ok(self, button_class_name):
         # 确保button本身在点击后消失
@@ -95,7 +95,7 @@ class browser:
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
-                return RETRY_TIME_OUT
+                return LM_RETRY_TIME_OUT
             return self.__get_excel()
 
     def __login(self):
@@ -137,7 +137,7 @@ class browser:
                             logging.debug(u'超过一分钟未登录，登录失败')
                             os.remove(code_image_path)
                             self.retry_time = 0
-                            return LOG_IN_TIME_OUT
+                            return LM_LOG_IN_TIME_OUT
             else:
                 logging.debug(u'不用再次登录')
                 self.retry_time = 0
@@ -148,7 +148,7 @@ class browser:
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
-                return RETRY_TIME_OUT
+                return LM_RETRY_TIME_OUT
             self.browser.refresh()
             return self.__login()
 
@@ -188,20 +188,20 @@ class browser:
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
-                return RETRY_TIME_OUT
+                return LM_RETRY_TIME_OUT
             self.browser.refresh()
             return self.__get_product_from_selection_room()
 
     def __record_search_history(self):
         cur_time = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
-        cursor = self.db_table_search.find({'user': self.package['user']})
+        cursor = self.db_table_search_history.find({'user': self.package['user']})
         if cursor.count() == 1:
-            self.db_table_search.update_one({'user': self.package['user']},
+            self.db_table_search_history.update_one({'user': self.package['user']},
                                      {"$set": {cur_time: self.package['keyword']}})
         elif cursor.count() == 0:
             new = {'user': self.package['user'],
                    cur_time: self.package['keyword']}
-            self.db_table_search.insert(new)
+            self.db_table_search_history.insert(new)
         logging.debug(u'存储到MONGODB HISTORY成功')
 
     def __save_to_mongo(self, goods_detail):
@@ -210,17 +210,16 @@ class browser:
         goods['search_time'] = cur_time
         goods['cursor'] = 0
         goods['goods_detail'] = goods_detail
-        cursor = self.db_table.find({'user': self.package['user']})
+        cursor = self.db_table_search_goods.find({'user': self.package['user']})
         if cursor.count() == 1:
-            self.db_table.update_one({'user': self.package['user']},
+            self.db_table_search_goods.update_one({'user': self.package['user']},
                                      {"$set": {'nick': self.package['nick'],
                                                'goods': goods}})
         elif cursor.count() == 0:
             new = {'user':self.package['user'],
-                   'remark':self.package['remark'],
                    'nick':self.package['nick'],
                    'goods':goods}
-            self.db_table.insert(new)
+            self.db_table_search_goods.insert(new)
         logging.debug(u'存储到MONGODB成功')
 
     def __download(self, url,path,cookies=None):
@@ -277,12 +276,12 @@ class browser:
             doc = pq(self.browser.page_source).remove_namespaces()
             if doc('div.no-data-list'):
                 logging.debug(u'没有找到商品')
-                return NO_GOODS
+                return LM_NO_GOODS
             self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + 'ali_search_err.png')
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
-                return RETRY_TIME_OUT
+                return LM_RETRY_TIME_OUT
             return self.ali_search(keyword)
         except Exception ,e:
             logging.error(u'页面出现错误，%s' % e)
@@ -290,7 +289,7 @@ class browser:
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
-                return RETRY_TIME_OUT
+                return LM_RETRY_TIME_OUT
             return self.ali_search(keyword)
 
     def init_browser(self):

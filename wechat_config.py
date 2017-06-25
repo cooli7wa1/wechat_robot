@@ -14,7 +14,7 @@ MEMBER_RECORD_PATH = os_documents_path + u'robot_data/xiaoyezi/member_record/mem
 INTEGRAL_GOOD_FOLD = os_documents_path + u'robot_data/xiaoyezi/integral_good/'
 INTEGRAL_RECORD_FOLD = os_documents_path + u'robot_data/xiaoyezi/integral_record/'
 FONT_PATH = os_documents_path + u'wechat_robot/STXINWEI.TTF'
-WECHAT_QR_PATH = os_documents_path
+WECHAT_QR_PATH = os_documents_path + u'/QR.png'
 
 COMMAND_LIST = [u'看活动', u'查积分', u'签到', u'帮助', u'积分玩法', u'积分商品', u'兑换流程']
 SEND_DELAY = 3  # 发送等待
@@ -28,10 +28,11 @@ MONITOR_ROOM_LIST = [INNER_ROOM_NICK_NAME, ROOM_NICK_NAME]  # 监控的群的nic
 monitor_room_user_name = []  # 监控的群的user_name
 GOODS_PER_TIME = 3  # 找商品时每次发送的商品数量
 MASTER_NAME = u'Rickey'
+GROUP_USER_NUMBER_INNERID = u'ltj_0'
 
 label_ddlr = u"会员名 订单编号 订单价格 佣金比例".split()
 label_jfdh = u"会员名 商品编号 商品价格 订单编号".split()
 label_jljf = u"会员名 奖励积分".split()
 
-send_message_lock = threading.Lock()  # 发送wechat消息锁
+
 
