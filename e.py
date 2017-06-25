@@ -6,10 +6,13 @@ from common_config import *
 import pymongo
 
 client = pymongo.MongoClient(MONGO_URL, connect=False)
-table = client[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_GOODS]
-cursor = table.find({'_id': ObjectId("594f9ea3d6936b1110f0dc7e")})
-info = cursor.next()
-table.delete_one({'_id': ObjectId(info['_id'])})
+table = client[MONGO_DB_WECHAT][MONGO_TABLE_WECHAT_USERS]
+cursor = table.find({})
+for user in cursor:
+    p = user['Points']
+    inner_id = user['InnerId']
+    if inner_id != 'ltj_0':
+        table.update_one({'InnerId':inner_id}, {"$set": {u'Points': p+10}})
 # cursor = table.find({})
 # print cursor.count()
 # info = cursor.next()

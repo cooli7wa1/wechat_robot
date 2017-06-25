@@ -233,6 +233,7 @@ class Database:
         father_info = self.DatebaseGetInfoByInnerId(father_innerid)
         father_nick_name = father_info[u'NickName']
         father_zhifubao = father_info[u'AliInfo'][u'ZhiFuBaoZH']
+        father_zhifubao_mark = AccountMark(father_zhifubao)
         father_points_change = int(round(child_change_points * FATHER_REWARD_PROP / 100.0))
         father_points_old = father_info[u'Points']
         father_points_new = father_points_old + father_points_change
@@ -243,7 +244,7 @@ class Database:
         SendMessageToRoom(TARGET_ROOM, '@msg@%s' %
                           ('@%s 亲，您邀请的好友【%s】，给您带来了【%s】积分的奖励\n'
                            '您的支付宝账号(%s)的当前积分为：%s' % (
-                               father_nick_name, child_nick_name, str(father_points_change), father_zhifubao,
+                               father_nick_name, child_nick_name, str(father_points_change), father_zhifubao_mark,
                                str(father_points_new))))
         logging.debug('==== 结束')
 
@@ -656,6 +657,12 @@ def user_view_points(user_name, nick_name):
     finally:
         logging.debug('==== 结束')
 
+def fix_unicode(unicode):
+    unicode_dict = {u'\U0001f33f':u'\U0001f340'}
+    for key in unicode_dict:
+        unicode = unicode.replace(key, unicode_dict[key])
+    return unicode
+
 def get_member_info(room_user_name, member_user_name=u'', member_nick_name=u''):
     ''' 通过用户的nick_name或者user_name来从群内获得用户所有信息
         member_nick_name: 用户真实昵称，注意不是群内昵称，也不是备注
@@ -664,10 +671,15 @@ def get_member_info(room_user_name, member_user_name=u'', member_nick_name=u''):
     '''
     try:
         logging.debug('==== 开始')
+        if member_nick_name:
+            member_nick_name = fix_unicode(member_nick_name)
+        logging.debug('==== user_name: %s, nick_name: %s', member_user_name, member_nick_name)
         itchat.update_chatroom(userName=room_user_name, detailedMember=True)
         room = itchat.search_chatrooms(userName=room_user_name)
         member_list = room[u'MemberList']
+        nick_names = []
         for i in range(len(member_list)):
+            nick_names.append(member_list[i][u'NickName'])
             if member_user_name:
                 if member_list[i][u'UserName'] == member_user_name:
                     logging.debug('==== 找到群用户信息')
@@ -676,6 +688,8 @@ def get_member_info(room_user_name, member_user_name=u'', member_nick_name=u''):
                 if member_list[i][u'NickName'] == member_nick_name:
                     logging.debug('==== 找到群用户信息')
                     return member_list[i]
+        logging.debug('==== nick_names_utf8: %s' % json.dumps(nick_names, ensure_ascii=False, encoding='utf-8'))
+        logging.debug('==== nick_names_unic: %s' % nick_names)
         logging.debug('==== 未找到群用户信息')
         return None
     finally:
@@ -742,6 +756,8 @@ def master_command_router(msg):
     logging.debug('==== 开始')
     to_name = msg['FromUserName']
     text = msg['Text']
+    a = [text]
+    print a
     if text == u'上传数据':
         SendMessage('@msg@%s' % ('主人您好，当前命令是： %s' % text), to_name)
         if UpdateToGit(is_robot=False, is_data=True) == 0:
@@ -975,12 +991,15 @@ def SendGoodsToUser(room_name, user_name, nick_name):
     db_table.update_one({u'user': user_name}, {"$set": {u'goods.long_pic.%s' % cur_time: out_long_pic_path}})
     # 发送文案和长图
     to_name = room_name
-    SendMessage('@msg@%s' % ('@%s 共找到%d个商品，当前第%d页:') % (nick_name, num, (cursor/GOODS_PER_TIME)+1), to_name)
+    if range_end != num:
+        SendMessage('@msg@%s' % (('@%s 共找到%d个商品，当前%d/%d页\n回复【下一页】，查看下页商品') %
+                    (nick_name, num, (cursor/GOODS_PER_TIME)+1, (num/GOODS_PER_TIME)+1)), to_name)
+    else:
+        SendMessage('@msg@%s' % (('@%s 共找到%d个商品，当前%d/%d页') %
+                    (nick_name, num, (cursor / GOODS_PER_TIME)+1, (num / GOODS_PER_TIME)+1)), to_name)
     SendMessage('@img@%s' % out_long_pic_path, to_name)
     for i in range(cursor, range_end):
         SendMessage('@msg@%s' % (('商品序号:%d\n' % i) + make_text(goods_detail[str(i)])), to_name)
-    if range_end != num:
-        SendMessage('@msg@%s' % ('回复【下一页】，查看下页商品'), to_name)
     # 发送成功之后，更新cursor
     db_table.update_one({'user': user_name}, {"$set": {u'goods.cursor': range_end}})
     # 删除用过的图片
