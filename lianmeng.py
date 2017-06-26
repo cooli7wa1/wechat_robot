@@ -335,11 +335,7 @@ def make_package(room=u'', user=u'', nick=u'', result=SUCCESS):
 def lianmeng_main(q_wechat_lianmeng, q_lianmeng_wechat):
     logging.info(u'lianmeng_main: 进程开始')
     browser_1 = browser(q_lianmeng_wechat, q_wechat_lianmeng)
-    ret = browser_1.init_browser()
-    if ret == 0:
-        browser_1.q_out.put(('result', 'success'))
-    else:
-        browser_1.q_out.put(('result', 'fail'))
+    browser_1.init_browser()
     try:
         logging.info(u'lianmeng_main: 开始接收来自wechat的命令')
         while True:
