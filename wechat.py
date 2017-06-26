@@ -426,6 +426,7 @@ class Database:
             info = self.DatebaseGetInfoByInnerId(inner_id)
             if info < 0:
                 return info
+            info[u'_id'] = u''
             return info
         finally:
             logging.debug('==== 结束')
