@@ -25,6 +25,8 @@ WECHAT_NO_ZHIFUBAOZH = -12
 WECHAT_DB_ERROR = -13
 WECHAT_ZHIFUBAO_NOT_EMPTY = -14
 WECHAT_NOT_FIND_FATHER = -15
+QUEUE_FULL = -16
+QUEUE_EMPTY = -17
 
 os_documents_path = os.popen('echo $HOME').read().replace('\n','') + u'/Documents/'
 PICTURES_FOLD_PATH = os_documents_path + u'robot_data/xiaoyezi/pictures/'

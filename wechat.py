@@ -1,12 +1,14 @@
 #coding:utf-8
 import json
 import random
+import traceback
+
 import itchat,shelve,re,codecs,threading,inspect,ctypes,wx,sys
 import pymongo
 import wx.grid
-from copy import deepcopy
 from PIL import Image, ImageDraw, ImageFont
 from bson import ObjectId
+import Queue
 
 from wechat_config import *
 import sys
@@ -106,7 +108,7 @@ def log_and_send_error_msg(title='', detail='', reason=''):
     func_name = stack[1][3]
     lineno = stack[1][2]
     logging.error('[%s][%s]\r\nTitle: %s\r\nDetail: %s\r\nReason: %s' % (func_name, lineno, title, detail, reason))
-    SendMessageToRoom(INNER_ROOM_NICK_NAME, '@msg@%s' % ('错误\nTitle: %s\nDetail: %s' % (title, detail)))
+    SendMessageToRoom(INNER_ROOM_NICK_NAME, '@msg@%s' % ('错误\nTitle: %s\nDetail: %s\nReason: %s' % (title, detail, reason)))
 
 def username_link_to_db(user_name, nick_name):
     if user_name in UserName_InnerId:
@@ -598,6 +600,7 @@ class IntegralRecord:
 class MemberRecord:
     member_record_mutex = threading.Lock()  # 邀请记录的同步锁
 
+    #TODO: 应该判断，邀请记录中的群名是否是当前的群
     def MemberRecordFindFather(self, nick_name):
         logging.debug('==== 开始')
         try:
@@ -709,230 +712,271 @@ def AccountMark(name):
     return name_mark
 
 def text_command_router(msg, nick_name):
-    logging.debug('==== 开始')
-    to_name = msg['FromUserName']
-    user_name = msg['ActualUserName']
+    try:
+        logging.debug('==== 开始')
+        to_name = msg['FromUserName']
+        user_name = msg['ActualUserName']
 
-    if msg['Text'] == u'看活动':
-        Template().TemplateSendActivity(to_name)
-    elif msg['Text'] == u'查积分':
-        ret = user_view_points(user_name, nick_name)
-        if ret < 0:
-            if ret == WECHAT_NOT_FIND:
-                SendMessage('@msg@%s' % ('@%s 亲，数据库中未找到昵称\n可能您是新用户或者更改了昵称\n请私聊联系小叶子处理') % nick_name, to_name)
-                pass
-            elif ret == WECHAT_NO_ZHIFUBAOZH:
-                SendMessage('@msg@%s' % ('@%s 您还未设置支付宝\n请私聊联系小叶子处理' % nick_name), to_name)
-                pass
+        if msg['Text'] == u'看活动':
+            Template().TemplateSendActivity(to_name)
+        elif msg['Text'] == u'查积分':
+            ret = user_view_points(user_name, nick_name)
+            if ret < 0:
+                if ret == WECHAT_NOT_FIND:
+                    SendMessage('@msg@%s' % ('@%s 亲，数据库中未找到昵称\n可能您是新用户或者更改了昵称\n请私聊联系小叶子处理') % nick_name, to_name)
+                    pass
+                elif ret == WECHAT_NO_ZHIFUBAOZH:
+                    SendMessage('@msg@%s' % ('@%s 您还未设置支付宝\n请私聊联系小叶子处理' % nick_name), to_name)
+                    pass
+                else:
+                    SendMessage('@msg@%s' % ('@%s O，NO，发生了一些错误，稍后再试吧' % nick_name), to_name)
             else:
-                SendMessage('@msg@%s' % ('@%s O，NO，发生了一些错误，稍后再试吧' % nick_name), to_name)
-        else:
-            zhifubao_mark = AccountMark(UserName_InnerId[user_name][u'ZhiFuBaoZH'])
-            SendMessage('@msg@%s' % ('@%s 亲，您的支付宝账号(%s)的当前积分为：%s' % (nick_name, zhifubao_mark, ret)), to_name)
-    elif msg['Text'] == u'签到':
-        ret = user_check_in(user_name, nick_name)
-        if ret < 0:
-            if ret == WECHAT_ALREADY_CHECKIN:
                 zhifubao_mark = AccountMark(UserName_InnerId[user_name][u'ZhiFuBaoZH'])
-                SendMessage('@msg@%s' % ('@%s 亲，您今天已签到过一次\n支付宝账号(%s)的当前积分为：%s' % (nick_name, zhifubao_mark, user_view_points(user_name, nick_name))), to_name)
-            elif ret == WECHAT_NOT_FIND:
-                SendMessage('@msg@%s' % ('@%s 亲，数据库中未找到昵称\n可能您是新用户或者更改了昵称\n请私聊联系小叶子处理') % nick_name, to_name)
-            elif ret == WECHAT_NO_ZHIFUBAOZH:
-                SendMessage('@msg@%s' % ('@%s 亲，您还未设置支付宝\n请私聊联系小叶子处理' % nick_name), to_name)
+                SendMessage('@msg@%s' % ('@%s 亲，您的支付宝账号(%s)的当前积分为：%s' % (nick_name, zhifubao_mark, ret)), to_name)
+        elif msg['Text'] == u'签到':
+            ret = user_check_in(user_name, nick_name)
+            if ret < 0:
+                if ret == WECHAT_ALREADY_CHECKIN:
+                    zhifubao_mark = AccountMark(UserName_InnerId[user_name][u'ZhiFuBaoZH'])
+                    SendMessage('@msg@%s' % ('@%s 亲，您今天已签到过一次\n支付宝账号(%s)的当前积分为：%s' % (nick_name, zhifubao_mark, user_view_points(user_name, nick_name))), to_name)
+                elif ret == WECHAT_NOT_FIND:
+                    SendMessage('@msg@%s' % ('@%s 亲，数据库中未找到昵称\n可能您是新用户或者更改了昵称\n请私聊联系小叶子处理') % nick_name, to_name)
+                elif ret == WECHAT_NO_ZHIFUBAOZH:
+                    SendMessage('@msg@%s' % ('@%s 亲，您还未设置支付宝\n请私聊联系小叶子处理' % nick_name), to_name)
+                else:
+                    SendMessage('@msg@%s' % ('@%s O，NO，发生了一些错误，稍后再试吧' % nick_name), to_name)
             else:
-                SendMessage('@msg@%s' % ('@%s O，NO，发生了一些错误，稍后再试吧' % nick_name), to_name)
-        else:
-            zhifubao_mark = AccountMark(UserName_InnerId[user_name][u'ZhiFuBaoZH'])
-            SendMessage('@msg@%s' % ('@%s 亲，签到成功\n您的支付宝账号(%s)的当前积分为：%s' % (nick_name, zhifubao_mark, user_view_points(user_name, nick_name))), to_name)
-            # Template().TemplateSendCommand(msg[to_name])
-    elif msg['Text'] == u'帮助':
-        Template().TemplateSendCommand(to_name)
-    elif msg['Text'] == u'积分玩法':
-        Template().TemplateSendIntegralregular(to_name)
-    elif msg['Text'] == u'积分商品':
-        Template().TemplateSendIntegralGood(to_name)
-    elif msg['Text'] == u'兑换流程':
-        Template().TemplateSendExchangeProcess(to_name)
-    logging.debug('==== 结束')
-    return
+                zhifubao_mark = AccountMark(UserName_InnerId[user_name][u'ZhiFuBaoZH'])
+                SendMessage('@msg@%s' % ('@%s 亲，签到成功\n您的支付宝账号(%s)的当前积分为：%s' % (nick_name, zhifubao_mark, user_view_points(user_name, nick_name))), to_name)
+                # Template().TemplateSendCommand(msg[to_name])
+        elif msg['Text'] == u'帮助':
+            Template().TemplateSendCommand(to_name)
+        elif msg['Text'] == u'积分玩法':
+            Template().TemplateSendIntegralregular(to_name)
+        elif msg['Text'] == u'积分商品':
+            Template().TemplateSendIntegralGood(to_name)
+        elif msg['Text'] == u'兑换流程':
+            Template().TemplateSendExchangeProcess(to_name)
+        logging.debug('==== 结束')
+        return
+    except Exception, e:
+        log_and_send_error_msg('Exception occur', 'See log', repr(e))
+        logging.error('Exception!!\nmsg: %s\nnick_name: %s\ne: %s' % (msg, nick_name, traceback.format_exc()))
+        raise
 
 def master_command_router(msg):
-    logging.debug('==== 开始')
-    to_name = msg['FromUserName']
-    text = msg['Text']
-    if text == u'上传数据':
-        SendMessage('@msg@%s' % ('主人您好，当前命令是： %s' % text), to_name)
-        if UpdateToGit(is_robot=False, is_data=True) == 0:
-            SendMessage('@msg@%s' % (text + u' 成功'), to_name)
-        else:
-            SendMessage('@msg@%s' % (text + u' 失败'), to_name)
-    elif text == u'上传代码':
-        SendMessage('@msg@%s' % ('主人您好，当前命令是： %s' % text), to_name)
-        if UpdateToGit(is_robot=False, is_data=False) == 0:
-            SendMessage('@msg@%s' % (text + u' 成功'), to_name)
-        else:
-            SendMessage('@msg@%s' % (text + u' 失败'), to_name)
-    elif text == u'查看线程':
-        SendMessage('@msg@%s' % ('主人您好，当前命令是：%s' % text), to_name)
-        logging.debug(str(threading.enumerate()))
-        SendMessage('@msg@%s' % (str(threading.enumerate())), to_name)
-    elif text == u'查看邀请':
-        SendMessage('@msg@%s' % ('主人您好，当前命令是：%s' % text), to_name)
-        lines = u''
-        for line in codecs.open(MEMBER_RECORD_PATH, 'rb', 'utf-8'):
-            lines = lines + line
-        lines = lines.strip()
-        SendMessage('@msg@%s' % lines, to_name)
-    elif re.match(u'查看数据#.*', text):
-        msg_list = text.split('#')
-        inner_id = u'ltj_' + msg_list[1]
-        SendMessage('@msg@%s' % ('主人您好，当前命令是：%s，会员是：%s' % (msg_list[0], inner_id)), to_name)
-        data_user = Database().DatabaseViewData(inner_id)
-        if data_user > 0:
-            SendMessage('@msg@%s' % json.dumps(data_user, ensure_ascii=False, encoding='utf-8'), to_name)
-    elif re.match(u'.*#.*#.*#ltj_.*', text):
-        cmd, zhifubao, real_nick_name, inner_id = text.split('#')
-        SendMessage('@msg@%s' % ('主人您好，收到命令：%s，正在处理..' % text), to_name)
-        # 获取群内显示的nick_name
-        room_user_name = GetRoomNameByNickName(TARGET_ROOM)
-        info = get_member_info(room_user_name, member_nick_name=real_nick_name)
-        nick_name = info[u'DisplayName'] if info[u'DisplayName'] else info[u'NickName']
-        if cmd == u'更新设置':
-            # 用户确定存在，但是昵称和支付宝都需要更新
-            # 发生在未设置支付宝，且数据库中昵称与现在的不符
-            # 需提供InnerId来设置
-            ret = Database().DatabaseSetZFBNick(inner_id, nick_name, zhifubao)
-            if ret < 0:
-                if ret == WECHAT_ZHIFUBAO_EXIST:
-                    SendMessage('@msg@%s' % ('更新设置失败，支付宝重复，支付宝：%s' % zhifubao), to_name)
-                elif ret == WECHAT_NICKNAME_EXIST:
-                    SendMessage('@msg@%s' % ('更新设置失败，群内昵称重复，群内昵称：%s' % nick_name), to_name)
-                elif ret == WECHAT_ZHIFUBAO_NICKNAME_BOTH_EXIST:
-                    SendMessage('@msg@%s' % ('更新设置失败，支付宝和群内昵称均重复，支付宝：%s，群内昵称：%s' % (zhifubao, nick_name)), to_name)
-                elif ret == WECHAT_ZHIFUBAO_NOT_EMPTY:
-                    SendMessage('@msg@%s' % ('更新设置失败，支付宝不为空：%s' % nick_name), to_name)
-                else:
-                    SendMessage('@msg@%s' % '更新设置失败，非正常原因，请查看日志', to_name)
+    try:
+        logging.debug('==== 开始')
+        to_name = msg['FromUserName']
+        text = msg['Text']
+        if text == u'上传数据':
+            SendMessage('@msg@%s' % ('主人您好，当前命令是： %s' % text), to_name)
+            if UpdateToGit(is_robot=False, is_data=True) == 0:
+                SendMessage('@msg@%s' % (text + u' 成功'), to_name)
+            else:
+                SendMessage('@msg@%s' % (text + u' 失败'), to_name)
+        elif text == u'上传代码':
+            SendMessage('@msg@%s' % ('主人您好，当前命令是： %s' % text), to_name)
+            if UpdateToGit(is_robot=False, is_data=False) == 0:
+                SendMessage('@msg@%s' % (text + u' 成功'), to_name)
+            else:
+                SendMessage('@msg@%s' % (text + u' 失败'), to_name)
+        elif text == u'查看线程':
+            SendMessage('@msg@%s' % ('主人您好，当前命令是：%s' % text), to_name)
+            logging.debug(str(threading.enumerate()))
+            SendMessage('@msg@%s' % (str(threading.enumerate())), to_name)
+        elif text == u'查看邀请':
+            SendMessage('@msg@%s' % ('主人您好，当前命令是：%s' % text), to_name)
+            lines = u''
+            for line in codecs.open(MEMBER_RECORD_PATH, 'rb', 'utf-8'):
+                lines = lines + line
+            lines = lines.strip()
+            SendMessage('@msg@%s' % lines, to_name)
+        elif re.match(u'查看数据#.*', text):
+            msg_list = text.split('#')
+            inner_id = u'ltj_' + msg_list[1]
+            SendMessage('@msg@%s' % ('主人您好，当前命令是：%s，会员是：%s' % (msg_list[0], inner_id)), to_name)
+            data_user = Database().DatabaseViewData(inner_id)
+            if data_user > 0:
+                SendMessage('@msg@%s' % json.dumps(data_user, ensure_ascii=False, encoding='utf-8'), to_name)
+        elif text == u'重启联盟':
+            SendMessage('@msg@%s' % ('主人您好，当前命令是：%s' % text), to_name)
+            communicate_with_main().send_to_main(u'cmd', u'rs_lm_process')
+        elif re.match(u'.*#.*#.*#ltj_.*', text):
+            cmd, zhifubao, real_nick_name, inner_id = text.split('#')
+            SendMessage('@msg@%s' % ('主人您好，收到命令：%s，正在处理..' % text), to_name)
+            # 获取群内显示的nick_name
+            room_user_name = GetRoomUserNameByNickName(TARGET_ROOM)
+            info = get_member_info(room_user_name, member_nick_name=real_nick_name)
+            nick_name = info[u'DisplayName'] if info[u'DisplayName'] else info[u'NickName']
+            if cmd == u'更新设置':
+                # 用户确定存在，但是昵称和支付宝都需要更新
+                # 发生在未设置支付宝，且数据库中昵称与现在的不符
+                # 需提供InnerId来设置
+                ret = Database().DatabaseSetZFBNick(inner_id, nick_name, zhifubao)
+                if ret < 0:
+                    if ret == WECHAT_ZHIFUBAO_EXIST:
+                        owner_nick_name = Database().db_table_wechat_users.find({u'AliInfo.ZhiFuBaoZH':zhifubao}).next()[u'NickName']
+                        SendMessage('@msg@%s' % ('更新设置失败，支付宝重复，支付宝：%s 所属用户：%s' % (zhifubao, owner_nick_name)), to_name)
+                    elif ret == WECHAT_NICKNAME_EXIST:
+                        SendMessage('@msg@%s' % ('更新设置失败，群内昵称重复，群内昵称：%s' % nick_name), to_name)
+                    elif ret == WECHAT_ZHIFUBAO_NICKNAME_BOTH_EXIST:
+                        owner_nick_name = Database().db_table_wechat_users.find({u'AliInfo.ZhiFuBaoZH': zhifubao}).next()[u'NickName']
+                        SendMessage('@msg@%s' % ('更新设置失败，支付宝和群内昵称均重复，支付宝：%s 所属用户：%s，群内昵称：%s'
+                                                 % (zhifubao, owner_nick_name, nick_name)), to_name)
+                    elif ret == WECHAT_ZHIFUBAO_NOT_EMPTY:
+                        SendMessage('@msg@%s' % ('更新设置失败，支付宝不为空：%s' % nick_name), to_name)
+                    else:
+                        SendMessage('@msg@%s' % '更新设置失败，非正常原因，请查看日志', to_name)
+                    return
+                SendMessage('@msg@%s' % ('更新设置成功，群内昵称：%s，支付宝：%s，内部ID：%s' % (nick_name, zhifubao, inner_id)), to_name)
+                pass
+        # 更新支付宝昵称, 设置支付宝账号，录入新用户
+        elif re.match(u'.*#.*#.*', text):
+            cmd, zhifubao, real_nick_name = text.split('#')
+            SendMessage('@msg@%s' % ('主人您好，收到命令：%s，正在处理..' % text), to_name)
+            # 获取群内显示的nick_name
+            room_user_name = GetRoomUserNameByNickName(TARGET_ROOM)
+            info = get_member_info(room_user_name, member_nick_name=real_nick_name)
+            if not info:
+                SendMessage('@msg@%s' % ('获取群内昵称失败，输入的应该是真实昵称，不是群内或者备注昵称：%s' % real_nick_name), to_name)
                 return
-            SendMessage('@msg@%s' % ('更新设置成功，群内昵称：%s，支付宝：%s，内部ID：%s' % (nick_name, zhifubao, inner_id)), to_name)
-            pass
-    # 更新支付宝昵称, 设置支付宝账号，录入新用户
-    elif re.match(u'.*#.*#.*', text):
-        cmd, zhifubao, real_nick_name = text.split('#')
-        SendMessage('@msg@%s' % ('主人您好，收到命令：%s，正在处理..' % text), to_name)
-        # 获取群内显示的nick_name
-        room_user_name = GetRoomNameByNickName(TARGET_ROOM)
-        info = get_member_info(room_user_name, member_nick_name=real_nick_name)
-        if not info:
-            SendMessage('@msg@%s' % ('获取群内昵称失败，输入的应该是真实昵称，不是群内或者备注昵称：%s' % real_nick_name), to_name)
-            return
-        nick_name = info[u'DisplayName'] if info[u'DisplayName'] else info[u'NickName']
-        if cmd == u'更新':
-            ret = Database().DatabaseUpdateNickName(nick_name, zhifubao)
-            if ret < 0:
-                if ret == WECHAT_NICKNAME_EXIST:
-                    SendMessage('@msg@%s' % ('更新失败，群内昵称重复，群内昵称：%s' % nick_name), to_name)
-                elif ret == WECHAT_NOT_FIND:
-                    SendMessage('@msg@%s' % ('更新失败，未找到支付宝，支付宝：%s' % zhifubao), to_name)
-                else:
-                    SendMessage('@msg@%s' % '更新失败，非正常原因，请查看日志', to_name)
-                return
-            SendMessage('@msg@%s' % ('更新成功，群内昵称：%s，支付宝：%s' % (nick_name, zhifubao)), to_name)
-        elif cmd == u'新':
-            next_id_num = Database().DatabaseUserNextNumber()
-            inner_id = u'ltj_' + str(next_id_num)
-            father = MemberRecord().MemberRecordFindFather(nick_name)
-            if father < 0:
-                father = u''
-            user_data = UserData(NickName=nick_name, InnerId=inner_id, ZhiFuBaoZH=zhifubao, Father=father).Get()
-            ret = Database().DatabaseAddUser(user_data)
-            if ret < 0:
-                if ret == WECHAT_ZHIFUBAO_NICKNAME_BOTH_EXIST:
-                    SendMessage('@msg@%s' % ('录入新用户失败，支付宝和群内昵称均重复，群内昵称：%s，支付宝：%s' % (nick_name, zhifubao)), to_name)
-                elif ret == WECHAT_NICKNAME_EXIST:
-                    SendMessage('@msg@%s' % ('录入新用户失败，群内昵称重复，群内昵称：%s' % nick_name), to_name)
-                elif ret == WECHAT_ZHIFUBAO_EXIST:
-                    SendMessage('@msg@%s' % ('录入新用户失败，支付宝重复，支付宝：%s' % zhifubao), to_name)
-                return
-            SendMessage('@msg@%s' % ('录入新用户成功，群内昵称：%s，支付宝：%s' % (nick_name, zhifubao)), to_name)
-        elif cmd == u'设置':
-            ret = Database().DatabaseSetZhiFuBao(nick_name, zhifubao)
-            if ret < 0:
-                if ret == WECHAT_ZHIFUBAO_EXIST:
-                    SendMessage('@msg@%s' % ('设置失败，支付宝重复，支付宝：%s' % zhifubao), to_name)
-                elif ret == WECHAT_NOT_FIND:
-                    SendMessage('@msg@%s' % ('设置失败，未找到群内昵称，群内昵称：%s' % nick_name), to_name)
-                elif ret == WECHAT_ZHIFUBAO_NOT_EMPTY:
-                    SendMessage('@msg@%s' % ('设置失败，支付宝不为空：%s' % nick_name), to_name)
-                else:
-                    SendMessage('@msg@%s' % '设置失败，非正常原因，请查看日志', to_name)
-                return
-            SendMessage('@msg@%s' % ('设置成功，群内昵称：%s，支付宝：%s' % (nick_name, zhifubao)), to_name)
+            nick_name = info[u'DisplayName'] if info[u'DisplayName'] else info[u'NickName']
+            if cmd == u'更新':
+                ret = Database().DatabaseUpdateNickName(nick_name, zhifubao)
+                if ret < 0:
+                    if ret == WECHAT_NICKNAME_EXIST:
+                        SendMessage('@msg@%s' % ('更新失败，群内昵称重复，群内昵称：%s' % nick_name), to_name)
+                    elif ret == WECHAT_NOT_FIND:
+                        SendMessage('@msg@%s' % ('更新失败，未找到支付宝，支付宝：%s' % zhifubao), to_name)
+                    else:
+                        SendMessage('@msg@%s' % '更新失败，非正常原因，请查看日志', to_name)
+                    return
+                SendMessage('@msg@%s' % ('更新成功，群内昵称：%s，支付宝：%s' % (nick_name, zhifubao)), to_name)
+            elif cmd == u'新':
+                next_id_num = Database().DatabaseUserNextNumber()
+                inner_id = u'ltj_' + str(next_id_num)
+                father = MemberRecord().MemberRecordFindFather(nick_name)
+                if father < 0:
+                    father = u''
+                user_data = UserData(NickName=nick_name, InnerId=inner_id, ZhiFuBaoZH=zhifubao, Father=father).Get()
+                ret = Database().DatabaseAddUser(user_data)
+                if ret < 0:
+                    if ret == WECHAT_ZHIFUBAO_NICKNAME_BOTH_EXIST:
+                        owner_nick_name = Database().db_table_wechat_users.find({u'AliInfo.ZhiFuBaoZH': zhifubao}).next()[u'NickName']
+                        SendMessage('@msg@%s' % ('录入新用户失败，支付宝和群内昵称均重复，支付宝：%s 所属用户：%s，群内昵称：%s'
+                                                 % (zhifubao, owner_nick_name, nick_name)), to_name)
+                    elif ret == WECHAT_NICKNAME_EXIST:
+                        SendMessage('@msg@%s' % ('录入新用户失败，群内昵称重复，群内昵称：%s' % nick_name), to_name)
+                    elif ret == WECHAT_ZHIFUBAO_EXIST:
+                        owner_nick_name = Database().db_table_wechat_users.find({u'AliInfo.ZhiFuBaoZH':zhifubao}).next()[u'NickName']
+                        SendMessage('@msg@%s' % ('录入新用户失败，支付宝重复，支付宝：%s 所属用户：%s' % (zhifubao, owner_nick_name)), to_name)
+                    return
+                SendMessage('@msg@%s' % ('录入新用户成功，群内昵称：%s，支付宝：%s' % (nick_name, zhifubao)), to_name)
+            elif cmd == u'设置':
+                ret = Database().DatabaseSetZhiFuBao(nick_name, zhifubao)
+                if ret < 0:
+                    if ret == WECHAT_ZHIFUBAO_EXIST:
+                        owner_nick_name = Database().db_table_wechat_users.find({u'AliInfo.ZhiFuBaoZH':zhifubao}).next()[u'NickName']
+                        SendMessage('@msg@%s' % ('设置失败，支付宝重复，支付宝：%s 所属用户：%s' % (zhifubao, owner_nick_name)), to_name)
+                    elif ret == WECHAT_NOT_FIND:
+                        SendMessage('@msg@%s' % ('设置失败，未找到群内昵称，群内昵称：%s' % nick_name), to_name)
+                    elif ret == WECHAT_ZHIFUBAO_NOT_EMPTY:
+                        SendMessage('@msg@%s' % ('设置失败，支付宝不为空：%s' % nick_name), to_name)
+                    else:
+                        SendMessage('@msg@%s' % '设置失败，非正常原因，请查看日志', to_name)
+                    return
+                SendMessage('@msg@%s' % ('设置成功，群内昵称：%s，支付宝：%s' % (nick_name, zhifubao)), to_name)
 
-    elif text == u'测试':
-        pass
-    logging.debug('==== 结束')
-    return
+        elif text == u'测试':
+            pass
+            pass
+        logging.debug('==== 结束')
+        return
+    except Exception, e:
+        log_and_send_error_msg('Exception occur', 'See log', repr(e))
+        logging.error('Exception!!\nmsg: %s\ne: %s' % (msg, traceback.format_exc()))
+        raise
 
 def group_text_reply(msg):
-    logging.debug('==== 开始')
-    member_info = get_member_info(msg[u'FromUserName'], msg[u'ActualUserName'])
-    if not member_info:
-        log_and_send_error_msg('未找到群内用户信息', 'UserName: %s' % msg[u'ActualUserName'])
-        SendMessage('@msg@%s' % ('@%s O，NO，出了一些问题，稍后再试吧' % msg[u'ActualNickName']), msg[u'FromUserName'])
+    try:
+        logging.debug('==== 开始')
+        member_info = get_member_info(msg[u'FromUserName'], msg[u'ActualUserName'])
+        if not member_info:
+            log_and_send_error_msg('未找到群内用户信息', 'UserName: %s' % msg[u'ActualUserName'])
+            SendMessage('@msg@%s' % ('@%s O，NO，出了一些问题，稍后再试吧' % msg[u'ActualNickName']), msg[u'FromUserName'])
+            return
+        nick_name = member_info[u'DisplayName'] if member_info[u'DisplayName'] else member_info[u'NickName']
+        if msg[u'Text'] in COMMAND_LIST:
+            logging.debug('==== 来自：%s，聊天内容：%s' % (nick_name, msg[u'Text']))
+            text_command_router(msg, nick_name)
+        elif re.match(u'找 .*', msg[u'Text']):
+            key_word = msg[u'Text'][2:].strip()
+            logging.debug('==== 来自：%s，收到查找商品命令: %s' % (nick_name, msg[u'Text']))
+            package = communicate_with_lianmeng().make_package(room=msg[u'FromUserName'], user=msg[u'ActualUserName'], nick=nick_name, keyword=key_word)
+            ret = communicate_with_lianmeng().send_msg_to_lianmeng(u'find', package)
+            if ret == QUEUE_FULL:
+                SendMessage('@msg@%s' % ('@%s 当前查找人数太多，请稍后再试' % nick_name), msg[u'FromUserName'])
+                return
+            SendMessage('@msg@%s' % ('@%s 正在为您查找商品【%s】，请稍等...' % (nick_name, key_word)), msg[u'FromUserName'])
+        elif msg[u'Text'] == u'下一页':
+            logging.debug('==== 收到命令，下一页')
+            communicate_with_lianmeng().send_goods_to_user({u'room': msg[u'FromUserName'], u'user': msg[u'ActualUserName'], u'nick': nick_name})
+        elif GetRoomUserNameByNickName(INNER_ROOM_NICK_NAME) == msg[u'FromUserName']:
+            master_command_router(msg)
+        logging.debug('==== 结束')
         return
-    nick_name = member_info[u'DisplayName'] if member_info[u'DisplayName'] else member_info[u'NickName']
-    if msg[u'Text'] in COMMAND_LIST:
-        logging.debug('==== 来自：%s，聊天内容：%s' % (nick_name, msg[u'Text']))
-        text_command_router(msg, nick_name)
-    elif re.match(u'找 .*', msg[u'Text']):
-        key_word = msg[u'Text'][2:].strip()
-        logging.debug('==== 来自：%s，收到查找商品命令: %s' % (nick_name, msg[u'Text']))
-        SendMessage('@msg@%s' % ('@%s 正在为您查找商品【%s】，请稍等...' % (nick_name, key_word)), msg[u'FromUserName'])
-        package = communicate_with_lianmeng().make_package(room=msg[u'FromUserName'], user=msg[u'ActualUserName'], nick=nick_name, keyword=key_word)
-        communicate_with_lianmeng().send_msg_to_lianmeng(u'find', package)
-    elif msg[u'Text'] == u'下一页':
-        logging.debug('==== 收到命令，下一页')
-        communicate_with_lianmeng().send_goods_to_user({u'room': msg[u'FromUserName'], u'user': msg[u'ActualUserName'], u'nick': nick_name})
-    elif GetRoomNameByNickName(INNER_ROOM_NICK_NAME) == msg[u'FromUserName']:
-        master_command_router(msg)
-    logging.debug('==== 结束')
-    return
+    except Exception, e:
+        log_and_send_error_msg('Exception occur', 'See log', repr(e))
+        logging.error('Exception!!\nmsg: %s\ne: %s' % (msg, traceback.format_exc()))
+        raise
 
 def huanying(msg):
-    logging.debug('==== 开始')
-    str_list = msg['Content'].split('"')
-    if len(str_list) < 4:  # 去除红包消息
+    try:
+        logging.debug('==== 开始')
+        str_list = msg['Content'].split('"')
+        if len(str_list) < 4:  # 去除红包消息
+            return
+        if str_list[4].find(u'加入了群聊') == -1 and str_list[4].find(u'分享的二维码加入群聊') == -1:
+            return
+        logging.debug('==== ' + msg['Content'] + ' ' + GetRoomNickNameByUserName(msg[u'FromUserName']))
+        logging.debug(msg)
+        SendMessage('@msg@%s' % ('欢迎亲加入【乐淘家】'), msg['FromUserName'])
+        Template().TemplateSendCommand(msg['FromUserName'])
+        record_t = msg['Content'] + ' ' + GetRoomNickNameByUserName(msg[u'FromUserName']) + '\r\n'
+        MemberRecord().MemberRecordAddRecord(record_t)
+        logging.debug('==== 结束')
         return
-    if str_list[4].find(u'加入了群聊') == -1 and str_list[4].find(u'分享的二维码加入群聊') == -1:
-        return
-    logging.debug('==== ' + msg['Content'] + ' ' + msg['User']['NickName'])
-    logging.debug(msg)
-    SendMessage('@msg@%s' % ('欢迎亲加入【乐淘家】'), msg['FromUserName'])
-    Template().TemplateSendCommand(msg['FromUserName'])
+    except Exception, e:
+        log_and_send_error_msg('Exception occur', 'See log', repr(e))
+        logging.error('Exception!!\nmsg: %s\ne: %s' % (msg, traceback.format_exc()))
+        raise
 
-    record_t = msg['Content'] + ' ' + msg['User']['NickName'] + '\r\n'
-    MemberRecord().MemberRecordAddRecord(record_t)
-
-    template = Template()
-    template.TemplateSendCommand(msg['FromUserName'])
-    logging.debug('==== 结束')
-    return
-
-def GetRoomNameByNickName(room_nick_name):
+def GetRoomUserNameByNickName(room_nick_name):
     logging.debug('==== 开始')
     rooms = itchat.get_chatrooms()
-    room_name = ''
+    room_user_name = ''
     for i in range(len(rooms)):
         if rooms[i][u'NickName'] == room_nick_name:
-            room_name = rooms[i][u'UserName']
+            room_user_name = rooms[i][u'UserName']
             break
     logging.debug('==== 结束')
-    return room_name
+    return room_user_name
+
+def GetRoomNickNameByUserName(room_user_name):
+    logging.debug('==== 开始')
+    rooms = itchat.get_chatrooms()
+    room_nick_name = ''
+    for i in range(len(rooms)):
+        if rooms[i][u'UserName'] == room_user_name:
+            room_nick_name = rooms[i][u'NickName']
+            break
+    logging.debug('==== 结束')
+    return room_nick_name
 
 def SendMessageToRoom(nick_name, msg):
     logging.debug('==== 开始')
-    room_name = GetRoomNameByNickName(nick_name)
+    room_name = GetRoomUserNameByNickName(nick_name)
     if room_name == '':
         logging.error('==== 没找到群')
         SendMessage('报告主人：没有找到群, nick_name: ' + nick_name, u'filehelper')
@@ -1027,7 +1071,7 @@ def ItchatMessageNoteGroup(msg):
     p.name = 'ItchatMessageNoteGroup ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
     p.setDaemon(True)
     p.start()
-    logging.debug('==== thread name is ' + p.name + ' nick name is ' + msg['ActualNickName'])
+    logging.debug('==== thread name is ' + p.name)
     return
 
 @itchat.msg_register(itchat.content.TEXT, isGroupChat=True)
@@ -1462,7 +1506,12 @@ class communicate_with_lianmeng:
         return d
 
     def send_msg_to_lianmeng(self, type, package):
-        self.q_out.put((type, package))
+        try:
+            self.q_out.put_nowait((type, package))
+            return SUCCESS
+        except Queue.Full:
+            return QUEUE_FULL
+
 
     def send_goods_to_user(self, package):
         p = threading.Thread(target=SendGoodsToUser, args=(package[u'room'], package[u'user'], package[u'nick']))
@@ -1519,6 +1568,11 @@ class communicate_with_main:
                 if msg == 'UI':
                     logging.debug('开始创建UI线程')
                     CreateUiThread()
+            elif type == 'response':
+                if msg == 'rs_lm_process_ok':
+                    SendMessageToRoom(INNER_ROOM_NICK_NAME, '重启联盟进程OK')
+    def send_to_main(self, type, msg):
+        communicate_with_main.q_out.put((type, msg))
 
 def init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     logging.info('init_thread: 创建GIT线程')
@@ -1532,7 +1586,7 @@ def init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wech
     # 等待微信初始化
     time.sleep(2)
     for room in MONITOR_ROOM_LIST:
-        monitor_room_user_name.append(GetRoomNameByNickName(room))
+        monitor_room_user_name.append(GetRoomUserNameByNickName(room))
     logging.info('init_thread: 创建接收lianmeng进程命令的线程')
     communicate_with_lianmeng.q_out = q_wechat_lianmeng
     communicate_with_lianmeng.q_in = q_lianmeng_wechat

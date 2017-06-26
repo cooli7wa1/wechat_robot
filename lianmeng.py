@@ -1,8 +1,9 @@
 #coding:utf-8
-import platform, requests, time, pymongo, xlrd, subprocess
+import Queue
+import requests, pymongo, xlrd
 import random
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -25,7 +26,7 @@ class browser:
         self.options = webdriver.ChromeOptions()
         self.options.add_argument('headless')
         self.options.add_argument('disable-gpu')
-        self.options.add_argument('window-size=1400x900')
+        self.options.add_argument('window-size=1600x900')
         self.browser = webdriver.Chrome(chrome_options=self.options)
         self.wait = WebDriverWait(self.browser, 5)
         self.headers = {'User-Agent':'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'}
@@ -43,11 +44,15 @@ class browser:
     def __click_must_ok(self, button_class_name):
         # 确保button本身在点击后消失
         find_button = self.browser.find_element_by_css_selector if button_class_name.startswith('#') else self.browser.find_element_by_class_name
+        cnt = 0
         while True:
             time.sleep(0.5)
             try:
                 find_button(button_class_name).click()
                 logging.debug('one more click')
+                cnt += 1
+                if cnt >= RETRY_TIMES:
+                    raise RuntimeError
             except NoSuchElementException:
                 break
             except Exception,e:
@@ -159,6 +164,15 @@ class browser:
 
     def __get_product_from_selection_room(self):
         try:
+            logging.debug(u'判断选取商品是否未空')
+            cur_num = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '#J_bar_selected > strong'))).text
+            if cur_num != '0':
+                self.browser.find_element_by_css_selector('#J_bar_selected').click()
+                self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR,
+                    '#J_selection_bar > div > div.selection-selected > div.selection-tab-wrap.wrap.clearfix > a'))).click()
+                self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR,
+                    '#J_global_dialog > div > div.dialog-ft.dialog-add-ok > span.btn.btn-brand.w110.mr20'))).click()
+                self.browser.find_element_by_css_selector('#J_bar_selected').click()
             logging.debug(u'点击“选取全页商品”')
             self.wait.until(EC.element_to_be_clickable((By.CLASS_NAME, 'select-all'))).click()
             logging.debug(u'等待数量更新')
@@ -339,15 +353,20 @@ def lianmeng_main(q_wechat_lianmeng, q_lianmeng_wechat):
     try:
         logging.info(u'lianmeng_main: 开始接收来自wechat的命令')
         while True:
-            type, msg = browser_1.q_in.get()
-            if type == 'find':
-                browser_1.package = msg
-                logging.info(u'lianmeng_main: 收到命令来自用户【%s】，开始查找【%s】' % (msg['nick'], msg['keyword']))
-                result = browser_1.ali_search(msg['keyword'])
-                response_package = make_package(room=msg['room'], user=msg['user'], nick=msg['nick'], result=result)
-                browser_1.q_out.put(('response', response_package))
-            elif type == 'cmd':
-                logging.info(u'lianmeng_main: 收到cmd')
-                pass
+            try:
+                type, msg = browser_1.q_in.get_nowait()
+            except Queue.Empty:
+                time.sleep(1)
+                continue
+            else:
+                if type == 'find':
+                    browser_1.package = msg
+                    logging.info(u'lianmeng_main: 收到命令来自用户【%s】，开始查找【%s】' % (msg['nick'], msg['keyword']))
+                    result = browser_1.ali_search(msg['keyword'])
+                    response_package = make_package(room=msg['room'], user=msg['user'], nick=msg['nick'], result=result)
+                    browser_1.q_out.put(('response', response_package))
+                elif type == 'cmd':
+                    logging.info(u'lianmeng_main: 收到cmd')
+                    pass
     finally:
         browser_1.browser.close()
