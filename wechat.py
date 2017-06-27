@@ -830,6 +830,8 @@ def master_command_router(msg):
                         SendMessage('@msg@%s' % '更新设置失败，非正常原因，请查看日志', to_name)
                     return
                 SendMessage('@msg@%s' % ('更新设置成功，群内昵称：%s，支付宝：%s，内部ID：%s' % (nick_name, zhifubao, inner_id)), to_name)
+                zhifubao_mark = AccountMark(zhifubao)
+                SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，支付宝：%s' % (nick_name, zhifubao_mark)))
                 pass
         # 更新支付宝昵称, 设置支付宝账号，录入新用户
         elif re.match(u'.*#.*#.*', text):
@@ -853,6 +855,8 @@ def master_command_router(msg):
                         SendMessage('@msg@%s' % '更新失败，非正常原因，请查看日志', to_name)
                     return
                 SendMessage('@msg@%s' % ('更新成功，群内昵称：%s，支付宝：%s' % (nick_name, zhifubao)), to_name)
+                zhifubao_mark = AccountMark(zhifubao)
+                SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，支付宝：%s' % (nick_name, zhifubao_mark)))
             elif cmd == u'新':
                 next_id_num = Database().DatabaseUserNextNumber()
                 inner_id = u'ltj_' + str(next_id_num)
@@ -873,6 +877,8 @@ def master_command_router(msg):
                         SendMessage('@msg@%s' % ('录入新用户失败，支付宝重复，支付宝：%s 所属用户：%s' % (zhifubao, owner_nick_name)), to_name)
                     return
                 SendMessage('@msg@%s' % ('录入新用户成功，群内昵称：%s，支付宝：%s' % (nick_name, zhifubao)), to_name)
+                zhifubao_mark = AccountMark(zhifubao)
+                SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，支付宝：%s' % (nick_name, zhifubao_mark)))
             elif cmd == u'设置':
                 ret = Database().DatabaseSetZhiFuBao(nick_name, zhifubao)
                 if ret < 0:
@@ -887,6 +893,8 @@ def master_command_router(msg):
                         SendMessage('@msg@%s' % '设置失败，非正常原因，请查看日志', to_name)
                     return
                 SendMessage('@msg@%s' % ('设置成功，群内昵称：%s，支付宝：%s' % (nick_name, zhifubao)), to_name)
+                zhifubao_mark = AccountMark(zhifubao)
+                SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，支付宝：%s' % (nick_name, zhifubao_mark)))
 
         elif text == u'测试':
             pass
@@ -998,16 +1006,18 @@ def make_text(dict):
         youhuiyuan = 0
     if youhuiyuan:
         kouling = dict[u'优惠券淘口令(30天内有效)']
+        url = dict[u'优惠券短链接(300天内有效)']
     else:
         kouling = dict[u'淘口令(30天内有效)']
+        url = dict[u'淘宝客短链接(300天内有效)']
     prop = eval(dict[u'收入比率(%)'])
     jifen = int(round(price*10*prop/100.0))
     if youhuiyuan:
-        text = u'%s\n【优惠券】%d【卷后价】%d【积分】%d\n%s,复制这条信息,打开【手机淘宝】即可下单' % \
-           (name, youhuiyuan, price-youhuiyuan, jifen, kouling)
+        text = u'%s\n【优惠券】%d 【积分】%d\n【卷后价】%d\n【领卷下单】%s\n%s,复制这条信息,打开【手机淘宝】即可下单' % \
+           (name, youhuiyuan, jifen, price-youhuiyuan, url, kouling)
     else:
-        text = u'%s\n【售价】%d【积分】%d\n%s,复制这条信息,打开【手机淘宝】即可下单' % \
-           (name, price, jifen, kouling)
+        text = u'%s\n【售价】%d\n【积分】%d\n【领卷下单】%s\n%s,复制这条信息,打开【手机淘宝】即可下单' % \
+           (name, price, jifen, url, kouling)
     return text
 
 def SendGoodsToUser(room_name, user_name, nick_name):
@@ -1053,15 +1063,17 @@ def SendGoodsToUser(room_name, user_name, nick_name):
         os.remove(pic)
     os.remove(out_long_pic_path)
 
-@itchat.msg_register(itchat.content.FRIENDS)
-def ItchatMessageFriend(msg):
-    pass
-    # p = threading.Thread(target=be_add_friend, args=(msg,))
-    # p.name = 'ItchatMessageFriend ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
-    # p.setDaemon(True)
-    # p.start()
-    # logging.debug('==== thread name is ' + p.name + ' nick name is ' + msg['RecommendInfo']['NickName'])
-    # return
+# def be_add_friend(msg):
+#
+#
+# @itchat.msg_register(itchat.content.FRIENDS)
+# def ItchatMessageFriend(msg):
+#     p = threading.Thread(target=be_add_friend, args=(msg,))
+#     p.name = 'ItchatMessageFriend ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
+#     p.setDaemon(True)
+#     p.start()
+#     logging.debug('==== thread name is ' + p.name + ' nick name is ' + msg['RecommendInfo']['NickName'])
+#     return
 
 @itchat.msg_register(itchat.content.NOTE, isGroupChat=True)
 def ItchatMessageNoteGroup(msg):

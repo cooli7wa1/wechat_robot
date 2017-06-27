@@ -279,13 +279,13 @@ class browser:
             return path
         session.close()
         
-    def ali_search(self, keyword):
+    def ali_search(self, keyword, search_dpyhj):
         try:
             logging.debug(u'开始搜索[%s]' % keyword)
             begin_time = time.time()
             self.__record_search_history()
             url = 'http://pub.alimama.com/promo/search/index.htm?q=' + keyword.encode('utf-8').replace(r'\x', '%') + \
-                  '&toPage=' + str(SEARCH_PAGE) + '&dpyhq=' + str(SEARCH_DPYHJ) + '&perPageSize=' + str(SEARCH_PER_PAGE_SIZE) + \
+                  '&toPage=' + str(SEARCH_PAGE) + '&dpyhq=' + str(search_dpyhj) + '&perPageSize=' + str(SEARCH_PER_PAGE_SIZE) + \
                   '&freeShipment=' + str(SEARCH_FREE_SHIPMENT) + '&startTkRate=' + str(SEARCH_START_TK_RATE) + '&queryType=' + \
                   str(SEARCH_QUERY_TYPE) + '&sortType=' + str(SEARCH_SORT_TYPE)
             self.browser.get(url)
@@ -362,7 +362,10 @@ def lianmeng_main(q_wechat_lianmeng, q_lianmeng_wechat):
                 if type == 'find':
                     browser_1.package = msg
                     logging.info(u'lianmeng_main: 收到命令来自用户【%s】，开始查找【%s】' % (msg['nick'], msg['keyword']))
-                    result = browser_1.ali_search(msg['keyword'])
+                    result = browser_1.ali_search(msg['keyword'], search_dpyhj=SEARCH_DPYHJ)
+                    if result == LM_NO_GOODS and SEARCH_DPYHJ == 1:
+                        logging.debug(u'未找到优惠券商品，转为查找没有优惠券的商品')
+                        result = browser_1.ali_search(msg['keyword'], search_dpyhj=0)
                     response_package = make_package(room=msg['room'], user=msg['user'], nick=msg['nick'], result=result)
                     browser_1.q_out.put(('response', response_package))
                 elif type == 'cmd':
