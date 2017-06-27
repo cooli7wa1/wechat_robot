@@ -24,11 +24,14 @@ def log_and_send_error_msg(title=u'', detail=u'', reason=u''):
     itchat.send('@msg@%s' % (u'错误\nTitle: %s\nDetail: %s' % (title, detail)), 'filehelper')
 
 
-@itchat.msg_register(itchat.content.TEXT, isGroupChat=True)
+
+
+@itchat.msg_register(itchat.content.SHARING, isGroupChat=True)
 def ItchatMessageTextGroup(msg):
     if msg['FromUserName'] not in monitor_room_user_name:
         return
-    print msg
+    print 'SHARING'
+    print json.dumps(msg, ensure_ascii=False, encoding='utf-8')
     # user_name = itchat.search_friends(nickName=u'杨思')[0]['UserName']
     # a = itchat.get_head_img(userName=user_name)
     # itchat.get_head_img(userName=user_name, picDir='head_rickey.jpg')
@@ -41,13 +44,17 @@ def ItchatMessageTextGroup(msg):
     # itchat.send('@img@/home/cooli7wa/Documents/robot_data/QR.png', 'filehelper')
     # f = StringIO(u'head_img')
     # itchat.send('@img@head.jpg', 'filehelper')
-    itchat.update_chatroom(userName=msg['FromUserName'], detailedMember=True)
-    print json.dumps(itchat.search_chatrooms(userName=msg['FromUserName']), ensure_ascii=False, encoding='utf-8')
+    # itchat.update_chatroom(userName=msg['FromUserName'], detailedMember=True)
+    # print json.dumps(itchat.search_chatrooms(userName=msg['FromUserName']), ensure_ascii=False, encoding='utf-8')
+    # print json.dumps(msg, ensure_ascii=False, encoding='utf-8')
+@itchat.msg_register(itchat.content.TEXT, isGroupChat=True)
+def ItchatMessageTextGroup(msg):
+    if msg['FromUserName'] not in monitor_room_user_name:
+        return
+    print 'TEXT'
     print json.dumps(msg, ensure_ascii=False, encoding='utf-8')
 
-    return
-
-itchat.auto_login(hotReload=True)
+itchat.auto_login()
 for room in MONITOR_ROOM_LIST:
     monitor_room_user_name.append(GetRoomNameByNickName(room))
 itchat.run()
