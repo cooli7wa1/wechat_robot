@@ -1613,7 +1613,7 @@ def create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianme
 
 def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     logging.info('wechat_main: 进程开始')
-    itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=True)
+    itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=False)
     logging.info('wechat_main: 创建init进程开始')
     create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat)
     itchat.run()
