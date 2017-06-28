@@ -498,46 +498,10 @@ class Template:
     def TemplateSendIntegralGood(self, to):
         logging.debug('==== 开始')
         try:
-            today = time.strftime('%Y%m%d', time.localtime(time.time()))
-            pic_file_name = today + '_stitch.jpg'
-            text_file_name = today + '_stitch.txt'
-            pic_path = INTEGRAL_GOOD_FOLD + pic_file_name
-            text_path = INTEGRAL_GOOD_FOLD + text_file_name
-            # 清理旧的长图和文本
-            files_list = os.listdir(INTEGRAL_GOOD_FOLD)
-            for file in files_list:
-                if file.endswith(('_stitch.jpg', '_stitch.txt')):
-                    if file != pic_file_name and file != text_file_name:
-                        os.remove(INTEGRAL_GOOD_FOLD + file)
-            if os.path.exists(pic_path) and os.path.exists(text_path):
-                self.__TemplateSendPicAndText(pic_path, text_path, to)
-                return
-            else:
-                files = os.listdir(INTEGRAL_GOOD_FOLD)
-                picture_names = []
-                for name in files:
-                    if re.match('^.*@.*\.jpg', name):
-                        if name.split('@')[1] >= today:
-                            picture_names.append(name)
-                nums = len(picture_names)
-                if nums == 0:
-                    SendMessage('@msg@%s' % "亲，当前没有可积分兑换商品", to)
-                    return
-                f = codecs.open(text_path, 'w', 'utf-8')
-                f.write('亲，今天可兑换积分商品有【' + str(nums) + '】种，长图在上面哦，口令如下：\r\n')
-                pictures_path = {}
-                for pic_name in picture_names:
-                    pic_head = pic_name[:-4]
-                    pic_name_list = pic_head.split('@')
-                    integral = int(round(float(pic_name_list[2])*(1-(float(pic_name_list[3])-5)/100)*INTEGRAL_GOOD_PROP))
-                    taokouling = pic_name_list[4]
-                    bianhao = pic_name_list[0]
-                    pictures_path[INTEGRAL_GOOD_FOLD + pic_name] = u'编号:%s, 所需积分:%s' % (bianhao, integral)
-                    text = '【商品编号】' + bianhao + '【所需积分】'+ repr(integral) + '【淘口令】' + taokouling + '\r\n'
-                    f.write(text)
-                f.close()
-                StitchPictures(pictures_path, pic_path, quality=20)
-                self.__TemplateSendPicAndText(pic_path, text_path, to)
+            f = codecs.open(INTEGRAL_GOOD_URL_FILE_PATH, 'rb', 'utf-8')
+            line = f.readline().strip()
+            url = line.split(' ')[1]
+            SendMessage('@msg@%s' % ('亲，点击链接查看积分商品：\n%s' % url), to)
         finally:
             logging.debug('==== 结束')
 
@@ -1011,6 +975,8 @@ def make_text(dict):
         kouling = dict[u'淘口令(30天内有效)']
         url = dict[u'淘宝客短链接(300天内有效)']
     prop = eval(dict[u'收入比率(%)'])
+    if prop > INTEGRAL_REWARD_MAX_PROP:
+        prop = INTEGRAL_REWARD_MAX_PROP
     jifen = int(round(price*10*prop/100.0))
     if youhuiyuan:
         text = u'%s\n【优惠券】%d 【积分】%d\n【卷后价】%d\n【领卷下单】%s\n%s,复制这条信息,打开【手机淘宝】即可下单' % \
@@ -1231,8 +1197,8 @@ class MyFrame(wx.Frame):
         if not (inner_id and number and price and prop):
             logging.error("==== 输入数据有误")
             return
-        if eval(prop) > 20:
-            prop = '20'
+        if eval(prop) > INTEGRAL_REWARD_MAX_PROP:
+            prop = str(INTEGRAL_REWARD_MAX_PROP)
         c_points = int(round(eval(price)*INTEGRAL_PROP*(eval(prop)/100.0)))
         ret = Database().DatabaseChangePoints(inner_id, c_points)
         if ret == 0:
@@ -1614,6 +1580,7 @@ def create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianme
 def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     logging.info('wechat_main: 进程开始')
     itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=False)
+    # itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=True)
     logging.info('wechat_main: 创建init进程开始')
     create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat)
     itchat.run()

@@ -10,7 +10,7 @@ DATABASE_FOLD = os_documents_path + u'robot_data/xiaoyezi/database/'
 ACTIVITY_FOLD = os_documents_path + u'robot_data/xiaoyezi/activity/'
 TEMPLATE_FOLD = os_documents_path + u'robot_data/xiaoyezi/template/'
 MEMBER_RECORD_PATH = os_documents_path + u'robot_data/xiaoyezi/member_record/member_record.txt'
-INTEGRAL_GOOD_FOLD = os_documents_path + u'robot_data/xiaoyezi/integral_good/'
+INTEGRAL_GOOD_URL_FILE_PATH = os_documents_path + u'robot_data/xiaoyezi/integral_good/url.txt'
 INTEGRAL_RECORD_FOLD = os_documents_path + u'robot_data/xiaoyezi/integral_record/'
 FONT_PATH = os_documents_path + u'wechat_robot/STXINWEI.TTF'
 WECHAT_QR_PATH = os_documents_path + u'/QR.png'
@@ -21,6 +21,7 @@ SEND_TIMES = 3  # 发送最大次数
 CHECK_IN_POINTS = 10  # 签到奖励的积分
 INTEGRAL_PROP = 10  # 积分 = 商品价格*INTEGRAL_PROP*佣金比例(佣金比例最高录入20%）
 INTEGRAL_GOOD_PROP = 100  # 积分商品所需积分 = 商品实际价格*INTEGRAL_GOOD_PROP*（1-佣金比例）
+INTEGRAL_REWARD_MAX_PROP = 20  #奖励积分的最大比例，大于最大比例，按照最大比例计算
 INNER_ROOM_NICK_NAME = u'乐淘家，内部信息群'
 ROOM_NICK_NAME = u'\U0001f49d【乐淘家】淘天猫内部优惠精选\U0001f49d'
 MONITOR_ROOM_LIST = [INNER_ROOM_NICK_NAME, ROOM_NICK_NAME]  # 监控的群的nick_name
