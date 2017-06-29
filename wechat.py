@@ -1186,7 +1186,7 @@ class MyFrame(wx.Frame):
 
     def OnButton1Click(self, event):
         logging.debug('==== 开始')
-        inner_id = self.ddlr_objs[u'会员名'].GetValue().encode('utf-8')
+        inner_id = self.ddlr_objs[u'会员名'].GetValue()
         number = self.ddlr_objs[u'订单编号'].GetValue()
         price = self.ddlr_objs[u'订单价格'].GetValue()
         prop = self.ddlr_objs[u'佣金比例'].GetValue()
@@ -1219,38 +1219,38 @@ class MyFrame(wx.Frame):
 
     def OnButton2Click(self, event):
         logging.debug('==== 开始')
-        inner_id = self.jfdh_objs[u'会员名'].GetValue().encode('utf-8')
+        inner_id = self.jfdh_objs[u'会员名'].GetValue()
         jp_num = self.jfdh_objs[u'商品编号'].GetValue()
         price = self.jfdh_objs[u'商品价格'].GetValue()
+        #TODO 应该从积分商品列表中获取当前商品的佣金比例，如果未找到此商品则返回错
+        prop = self.jfdh_objs[u'佣金比例'].GetValue()
         number = self.jfdh_objs[u'订单编号'].GetValue()
         ret = IntegralRecord().IntegralRecordCheckOrder(number)
         if ret < 0:
             return
-        logging.debug('==== 积分兑换，会员：%s，积分商品：%s，订单编号：%s' % (inner_id, jp_num, number))
-        if not (inner_id and jp_num and number):
+        logging.debug('==== 积分兑换，会员：%s，积分商品：%s，价格：%s， 佣金比例：%s，订单编号：%s' %
+                      (inner_id, jp_num, price, prop, number))
+        if not (inner_id and jp_num and price and number and prop):
             logging.error('==== 输入数据有误')
             return
-        files = os.listdir(INTEGRAL_GOOD_FOLD)
-        for name in files:
-            if name.startswith(jp_num + '@'):
-                name_list = name.split('@')
-                integral = int(round(float(price) * (1 - (float(name_list[3])-5) / 100) * INTEGRAL_GOOD_PROP))
-                c_points = 0 - integral
-                ret = Database().DatabaseChangePoints(inner_id, c_points)
-                if ret == 0:
-                    cur_points = Database().DatabaseViewPoints(inner_id)
-                    IntegralRecord().IntegralRecordAddRecord(inner_id, jp_num, price, name_list[3], str(c_points), str(cur_points))
-                    IntegralRecord().IntegralRecordOrderRecord(inner_id, number, jp_num)
-                    info = Database().DatebaseGetInfoByInnerId(inner_id)
-                    nick_name = info[u'NickName']
-                    zhifubao_mark = AccountMark(info[u'AliInfo'][u'ZhiFuBaoZH'])
-                    SendMessageToRoom(TARGET_ROOM,
-                                      '@msg@%s' % ('@%s 亲，您已成功兑换积分商品【%s】\n'
-                                      '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, jp_num, zhifubao_mark, repr(cur_points))))
-                    # self.table = MyTable()
-                    # self.grid.SetTable(self.table, True)
-                    # self.grid.AutoSize()
-                    # self.grid.ForceRefresh()
+
+        integral = int(round(float(price) * (1 - eval(prop)/100) * INTEGRAL_GOOD_PROP))
+        c_points = 0 - integral
+        ret = Database().DatabaseChangePoints(inner_id, c_points)
+        if ret == 0:
+            cur_points = Database().DatabaseViewPoints(inner_id)
+            IntegralRecord().IntegralRecordAddRecord(inner_id, jp_num, price, prop, str(c_points), str(cur_points))
+            IntegralRecord().IntegralRecordOrderRecord(inner_id, number, jp_num)
+            info = Database().DatebaseGetInfoByInnerId(inner_id)
+            nick_name = info[u'NickName']
+            zhifubao_mark = AccountMark(info[u'AliInfo'][u'ZhiFuBaoZH'])
+            SendMessageToRoom(TARGET_ROOM,
+                              '@msg@%s' % ('@%s 亲，您已成功兑换积分商品【%s】\n'
+                              '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, jp_num, zhifubao_mark, repr(cur_points))))
+            # self.table = MyTable()
+            # self.grid.SetTable(self.table, True)
+            # self.grid.AutoSize()
+            # self.grid.ForceRefresh()
         logging.debug('==== 结束')
 
     def OnButton3Click(self, event):

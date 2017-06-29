@@ -37,7 +37,7 @@ LOG_CLEAN_TIME_INTERVAL = 60*60*24*2  # 2天，超过时间间隔的LOG会被清
 CLEAN_THREAD_INTERVAL = 60*10  # 10分钟，CLEAN Thread 每隔一段唤醒一次
 
 label_ddlr = u"会员名 订单编号 订单价格 佣金比例".split()
-label_jfdh = u"会员名 商品编号 商品价格 订单编号".split()
+label_jfdh = u"会员名 商品编号 商品价格 佣金比例 订单编号".split()
 label_jljf = u"会员名 奖励积分".split()
 
 
