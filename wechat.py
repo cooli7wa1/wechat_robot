@@ -629,7 +629,7 @@ def user_view_points(user_name, nick_name):
         logging.debug('==== 结束')
 
 def fix_unicode(unicode):
-    unicode_dict = {u'\U0001f33f':u'\U0001f340'}
+    unicode_dict = {u'\U0001f33f':u'\U0001f340', u'&':u'&amp;'}
     for key in unicode_dict:
         unicode = unicode.replace(key, unicode_dict[key])
     return unicode
@@ -795,7 +795,7 @@ def master_command_router(msg):
                     return
                 SendMessage('@msg@%s' % ('更新设置成功，群内昵称：%s，支付宝：%s，内部ID：%s' % (nick_name, zhifubao, inner_id)), to_name)
                 zhifubao_mark = AccountMark(zhifubao)
-                SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，支付宝：%s' % (nick_name, zhifubao_mark)))
+                SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，重新输入命令吧\n支付宝：%s' % (nick_name, zhifubao_mark)))
                 pass
         # 更新支付宝昵称, 设置支付宝账号，录入新用户
         elif re.match(u'.*#.*#.*', text):
@@ -820,7 +820,7 @@ def master_command_router(msg):
                     return
                 SendMessage('@msg@%s' % ('更新成功，群内昵称：%s，支付宝：%s' % (nick_name, zhifubao)), to_name)
                 zhifubao_mark = AccountMark(zhifubao)
-                SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，支付宝：%s' % (nick_name, zhifubao_mark)))
+                SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，重新输入命令吧\n支付宝：%s' % (nick_name, zhifubao_mark)))
             elif cmd == u'新':
                 next_id_num = Database().DatabaseUserNextNumber()
                 inner_id = u'ltj_' + str(next_id_num)
@@ -842,7 +842,7 @@ def master_command_router(msg):
                     return
                 SendMessage('@msg@%s' % ('录入新用户成功，群内昵称：%s，支付宝：%s' % (nick_name, zhifubao)), to_name)
                 zhifubao_mark = AccountMark(zhifubao)
-                SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，支付宝：%s' % (nick_name, zhifubao_mark)))
+                SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，重新输入命令吧\n支付宝：%s' % (nick_name, zhifubao_mark)))
             elif cmd == u'设置':
                 ret = Database().DatabaseSetZhiFuBao(nick_name, zhifubao)
                 if ret < 0:
@@ -858,7 +858,7 @@ def master_command_router(msg):
                     return
                 SendMessage('@msg@%s' % ('设置成功，群内昵称：%s，支付宝：%s' % (nick_name, zhifubao)), to_name)
                 zhifubao_mark = AccountMark(zhifubao)
-                SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，支付宝：%s' % (nick_name, zhifubao_mark)))
+                SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，重新输入命令吧\n支付宝：%s' % (nick_name, zhifubao_mark)))
 
         elif text == u'测试':
             pass
@@ -929,6 +929,7 @@ def GetRoomUserNameByNickName(room_nick_name):
     rooms = itchat.get_chatrooms()
     room_user_name = ''
     for i in range(len(rooms)):
+        # print json.dumps(rooms[i][u'NickName'], ensure_ascii=False, encoding='utf-8')
         if rooms[i][u'NickName'] == room_nick_name:
             room_user_name = rooms[i][u'UserName']
             break
@@ -1234,7 +1235,7 @@ class MyFrame(wx.Frame):
             logging.error('==== 输入数据有误')
             return
 
-        integral = int(round(float(price) * (1 - eval(prop)/100) * INTEGRAL_GOOD_PROP))
+        integral = int(round(float(price) * (1 - eval(prop)/100.0) * INTEGRAL_GOOD_PROP))
         c_points = 0 - integral
         ret = Database().DatabaseChangePoints(inner_id, c_points)
         if ret == 0:
@@ -1579,8 +1580,8 @@ def create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianme
 
 def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     logging.info('wechat_main: 进程开始')
-    itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=False)
-    # itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=True)
+    # itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=False)
+    itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=True)
     logging.info('wechat_main: 创建init进程开始')
     create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat)
     itchat.run()
