@@ -1,5 +1,7 @@
 #coding:utf-8
 import Queue
+import threading
+
 import requests, pymongo, xlrd
 import random
 from selenium import webdriver
@@ -10,6 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from lianmeng_config import *
 from pyquery import PyQuery as pq
+import Queue
 import sys
 reload(sys)
 sys.setdefaultencoding('utf-8')
@@ -19,28 +22,49 @@ class BrowserException(Exception):
         Exception.__init__(self, err)
 
 class browser:
-    def __init__(self, q_lianmeng_wechat, q_wechat_lianmeng):
-        self.client = pymongo.MongoClient(MONGO_URL, connect=False)
-        self.db_table_search_goods = self.client[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_GOODS]
-        self.db_table_search_history = self.client[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_HISTORY]
+    def __init__(self, name):
+        self.q_in = Queue.Queue(3)
+        self.q_out = Queue.Queue(3)
+        self.headers = {'User-Agent':'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'}
+        self.package = {}
+        self.browser_name = name
+        self.__init_qin_thread()
+
+    def __invoke_cmd(self, type, msg):
+        '''subclasses should implement this method
+        '''
+        pass
+
+    def __init_qin_thread(self):
+        t = threading.Thread(target=self.__qin_thread(), )
+        t.setDaemon(True)
+        t.start()
+        t.name = 'browser qin thread name %s time %d' % (self.browser_name, time.strftime('%d_%H%M%S', time.localtime(time.time())))
+        logging.debug('==== thread name is %s' % t.name)
+
+    def __qin_thread(self):
+        while True:
+            logging.info('浏览器【%s】开始接收命令' % self.browser_name)
+            type, msg = self.q_in.get()
+            logging.debug('浏览器收到命令, %s %s' % (type, msg))
+            self.__invoke_cmd(type, msg)
+
+    def __send_msg_to_q(self, package):
+        logging.info('浏览器【%s】发送命令 %s' % (self.browser_name, package))
+            self.q_out.put(package)
+
+class browser_selenium(browser):
+    def __init__(self, name):
+        browser.__init__(name)
         self.options = webdriver.ChromeOptions()
         self.options.add_argument('headless')
         self.options.add_argument('disable-gpu')
         self.options.add_argument('window-size=1600x900')
         self.browser = webdriver.Chrome(chrome_options=self.options)
         self.wait = WebDriverWait(self.browser, 5)
-        self.headers = {'User-Agent':'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'}
-        self.q_in = q_wechat_lianmeng
-        self.q_out = q_lianmeng_wechat
-        self.package = {}
         self.retry_time = 0
 
-    # def __print_qr(self, fileDir):
-    #     if platform.system() == 'Linux':
-    #         subprocess.call(['xdg-open', fileDir])
-    #     else:
-    #         os.startfile(fileDir)
-    
+class lianmeng_browser(browser_selenium):
     def __click_must_ok(self, button_class_name):
         # 确保button本身在点击后消失
         find_button = self.browser.find_element_by_css_selector if button_class_name.startswith('#') else self.browser.find_element_by_class_name
@@ -323,7 +347,7 @@ class browser:
                 return LM_RETRY_TIME_OUT
             return self.ali_search(keyword)
 
-    def init_browser(self):
+    def init_url(self):
         try:
             logging.info(u'开始初始化浏览器')
             url =  'http://pub.alimama.com/'
@@ -342,9 +366,18 @@ class browser:
             #     return -1
             return self.init_browser()
 
+    def __invoke_cmd(self, type, msg):
+        if type == 'find':
+            self.ali_search()
+        elif type == 'init':
+            self.__init_url()
+
+
 def make_package(room=u'', user=u'', nick=u'', result=SUCCESS):
     d = {'room':room, 'user':user, 'nick':nick, 'result':result}
     return d
+
+lianmeng_thread_list = []
 
 def lianmeng_main(q_wechat_lianmeng, q_lianmeng_wechat):
     logging.info(u'lianmeng_main: 进程开始')
