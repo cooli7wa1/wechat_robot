@@ -977,7 +977,7 @@ def make_text(dict):
     prop = eval(dict[u'收入比率(%)'])
     if prop > INTEGRAL_REWARD_MAX_PROP:
         prop = INTEGRAL_REWARD_MAX_PROP
-    jifen = int(round(price*10*prop/100.0))
+    jifen = int(round((price-youhuiyuan)*10*prop/100.0))
     if youhuiyuan:
         text = u'%s\n【优惠券】%d 【积分】%d\n【卷后价】%d\n【领卷下单】%s\n%s,复制这条信息,打开【手机淘宝】即可下单' % \
            (name, youhuiyuan, jifen, price-youhuiyuan, url, kouling)
