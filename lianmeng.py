@@ -22,15 +22,15 @@ class BrowserException(Exception):
         Exception.__init__(self, err)
 
 class browser:
-    def __init__(self, name):
+    def __init__(self, name, q_lianmeng_wechat):
         self.q_in = Queue.Queue(3)
-        self.q_out = Queue.Queue(3)
+        self.q_out = q_lianmeng_wechat
         self.headers = {'User-Agent':'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'}
         self.package = {}
         self.browser_name = name # room_user_name
-        self.__init_qin_thread()
+        # self.__init_qin_thread()
 
-    def __invoke_cmd(self, type, package):
+    def __invoke_cmd(self, package):
         '''subclasses should implement this method
         '''
         pass
@@ -45,22 +45,21 @@ class browser:
     def __qin_thread(self):
         while True:
             logging.info(u'浏览器【%s】开始接收' % self.browser_name)
-            type, package = self.q_in.get()
-            logging.debug(u'浏览器收到命令, %s %s' % (type, package))
-            self.__invoke_cmd(type, package)
+            package = self.q_in.get()
+            self.__invoke_cmd(package)
 
-    def __send_msg_to_q(self, type, package):
+    def __send_msg_to_q(self, package):
+        type = package[0]
+        sub_type = package[1]
+        msg = package[2]
         logging.info(u'浏览器【%s】开始发送，type:%s， subtype:%s，msg:%s' %
-                     (self.browser_name, type, package['subtype'], package['msg']))
-        self.q_out.put(type, package)
-
-    def __make_package(self, type, msg):
-
-
+                     (self.browser_name, type, sub_type, msg))
+        self.q_out.put(package)
 
 class browser_selenium(browser):
-    def __init__(self, name):
-        browser.__init__(self, name)
+    def __init__(self, name, q_lianmeng_wechat):
+        browser.__init__(self, name, q_lianmeng_wechat)
+        print 'hahahahaha'
         self.options = webdriver.ChromeOptions()
         self.options.add_argument('headless')
         self.options.add_argument('disable-gpu')
@@ -69,7 +68,24 @@ class browser_selenium(browser):
         self.wait = WebDriverWait(self.browser, 5)
         self.retry_time = 0
 
-class lianmeng_browser(browser_selenium):
+    def __qin_thread(self):
+        try:
+            while True:
+                logging.info(u'浏览器【%s】开始接收' % self.browser_name)
+                package = self.q_in.get()
+                self.__invoke_cmd(package)
+        finally:
+            self.browser.quit()
+
+class browser_lianmeng(browser_selenium):
+    def __init__(self, name, q_lianmeng_wechat):
+        browser_selenium.__init__(self, name, q_lianmeng_wechat)
+        self.client = pymongo.MongoClient(MONGO_URL, connect=False)
+        self.db_table_search_goods = self.client[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_GOODS]
+        self.db_table_search_history = self.client[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_HISTORY]
+        ret = self.__init_url()
+        package = make_package(u'response', room=self.browser_name, subtype=u'rinit', content=ret)
+        self.__send_msg_to_q(package)
 
     def __click_must_ok(self, button_class_name):
         find_button = self.browser.find_element_by_css_selector if button_class_name.startswith('#') else self.browser.find_element_by_class_name
@@ -154,8 +170,8 @@ class lianmeng_browser(browser_selenium):
                 code_image_path = CODE_IMAGE_FOLD_PATH + 'codeimage_%s.jpg' % cur_time
                 self.__download(img_url, code_image_path)
                 logging.debug(u'将二维码发送给用户登录')
-                package = make_package(room=self.browser_name, subtype='login', msg=code_image_path)
-                self.__send_msg_to_q('notice', package)
+                package = make_package(u'notice', room=self.browser_name, subtype=u'login', content=code_image_path)
+                self.__send_msg_to_q(package)
                 # 判断是否登录成功
                 times = 0
                 while True:
@@ -165,8 +181,8 @@ class lianmeng_browser(browser_selenium):
                         logging.debug(u'登录成功')
                         os.remove(code_image_path)
                         self.retry_time = 0
-                        package = make_package(room=self.browser_name, subtype='rlogin', msg='success')
-                        self.__send_msg_to_q('notice', package)
+                        package = make_package(u'notice', room=self.browser_name, subtype=u'rlogin', content=u'success')
+                        self.__send_msg_to_q(package)
                         return SUCCESS
                     else:
                         times +=1
@@ -174,8 +190,8 @@ class lianmeng_browser(browser_selenium):
                             logging.debug(u'超过一分钟未登录，登录失败')
                             os.remove(code_image_path)
                             self.retry_time = 0
-                            package = make_package(room=self.browser_name, subtype='rlogin', msg='fail')
-                            self.__send_msg_to_q('notice', package)
+                            package = make_package(u'notice', room=self.browser_name, subtype=u'rlogin', content=u'fail')
+                            self.__send_msg_to_q(package)
                             return LM_LOG_IN_TIME_OUT
             else:
                 logging.debug(u'不用再次登录')
@@ -364,7 +380,7 @@ class lianmeng_browser(browser_selenium):
                 return ret
             logging.info(u'初始化成功')
             self.retry_time = 0
-            return 0
+            return SUCCESS
         except Exception, e:
             logging.info(u'初始化失败，%s' % e)
             self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_init_url_err.png')
@@ -374,57 +390,73 @@ class lianmeng_browser(browser_selenium):
                 return LM_RETRY_TIME_OUT
             return self.__init_url()
 
-    def __invoke_cmd(self, type, msg):
-        if type == 'find':
-            logging.info(u'browser %s: 收到命令来自用户【%s】，开始查找【%s】' % (self.browser_name, msg['nick'], msg['keyword']))
-            self.package = msg
-            result = self.__ali_search(SEARCH_DPYHJ)
-            if result < 0:
-                if result == LM_RETRY_TIME_OUT:
-                    package = self.
-                if result == LM_NO_GOODS and SEARCH_DPYHJ == 1:
+    def __invoke_cmd(self, package):
+        type = package[0]
+        sub_type = package[1]
+        msg = package[2]
+        if type == u'cmd':
+            if sub_type == u'find':
+                self.package = package
+                logging.info(u'browser %s: 收到命令来自用户【%s】，开始查找【%s】' % (self.browser_name, msg[u'nick'], msg[u'keyword']))
+                self.package = msg
+                ret = self.__ali_search(SEARCH_DPYHJ)
+                if ret == LM_NO_GOODS and SEARCH_DPYHJ == 1:
                     logging.debug(u'未找到优惠券商品，转为查找没有优惠券的商品')
-                    result = self.__ali_search(0)
-                elif result == LM_LOG_IN_TIME_OUT:
+                    ret = self.__ali_search(0)
+                package = make_package(u'response', room=self.browser_name, subtype=u'rfind', user=msg[u'user'],
+                                       nick=msg[u'nick'], content=ret)
+                self.__send_msg_to_q(package)
+            if sub_type == u'close' or sub_type == u'close_all':
+                self.browser.quit()
 
-            response_package = make_package(room=msg['room'], user=msg['user'], nick=msg['nick'], result=result)
-            self.q_out.put(('response', response_package))
-        elif type == 'init':
-            ret = self.__init_url()
-            if ret < 0:
-
-
-
-def make_package(room, msg, subtype=u'', user=u'', nick=u''):
-    d = {'room':room, 'msg':msg, 'subcmd':subtype, 'user':user, 'nick':nick}
+def make_package(type, room, content=u'', subtype=u'', user=u'', nick=u''):
+    d = (type, subtype, {u'room':room, u'content':content, u'user':user, u'nick':nick})
     return d
 
-lianmeng_thread_list = []
+browser_thread_list = []
 
 def lianmeng_main(q_wechat_lianmeng, q_lianmeng_wechat):
+    global browser_thread_list
     logging.info(u'lianmeng_main: 进程开始')
-    browser_1 = browser(q_lianmeng_wechat, q_wechat_lianmeng)
-    browser_1.init_browser()
     try:
         logging.info(u'lianmeng_main: 开始接收来自wechat的命令')
         while True:
             try:
-                type, msg = browser_1.q_in.get_nowait()
+                package = q_wechat_lianmeng.get_nowait()
+                type = package[0]
+                sub_type = package[1]
+                msg = package[2]
+                room = msg[u'room']
             except Queue.Empty:
                 time.sleep(1)
                 continue
             else:
-                if type == 'find':
-                    browser_1.package = msg
-                    logging.info(u'lianmeng_main: 收到命令来自用户【%s】，开始查找【%s】' % (msg['nick'], msg['keyword']))
-                    result = browser_1.ali_search(msg['keyword'], search_dpyhj=SEARCH_DPYHJ)
-                    if result == LM_NO_GOODS and SEARCH_DPYHJ == 1:
-                        logging.debug(u'未找到优惠券商品，转为查找没有优惠券的商品')
-                        result = browser_1.ali_search(msg['keyword'], search_dpyhj=0)
-                    response_package = make_package(room=msg['room'], user=msg['user'], nick=msg['nick'], result=result)
-                    browser_1.q_out.put(('response', response_package))
-                elif type == 'cmd':
-                    logging.info(u'lianmeng_main: 收到cmd')
-                    pass
+                logging.debug(u'lianmeng_main: 收到命令 %s, %s, %s' % (type, sub_type, msg))
+                if type == u'cmd':
+                    if sub_type == u'init':
+                        for b in browser_thread_list:
+                            if b[u'room'] == room:
+                                logging.error(u'浏览器已经存在 %s' % room)
+                                continue
+                        browser = browser_lianmeng(msg[u'room'], q_lianmeng_wechat)
+                        browser_thread_list.append({u'room':msg[u'room'], u'handle':browser})
+                    elif sub_type == u'find':
+                        for b in browser_thread_list:
+                            if b[u'room'] == room:
+                                b[u'handle'].q_in.put(package)
+                                continue
+                        logging.error(u'lianmeng_main: not find browser %s' % room)
+                    elif sub_type == u'close_all':
+                        for b in browser_thread_list:
+                            b[u'handle'].q_in.put(package)
+                        browser_thread_list = []
+                    else:
+                        logging.error(u'unknown sub_type %s' % sub_type)
+                else:
+                    logging.error(u'unknown type %s' % type)
     finally:
-        browser_1.browser.close()
+        pass
+        # make close package for Ctrl+C
+        # package = make_package(u'cmd', u'', u'', u'close')
+        # for b in browser_thread_list:
+        #     b[u'handle'].q_in.put(package)

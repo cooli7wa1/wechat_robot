@@ -1477,24 +1477,33 @@ def CreateGitThread():
     git_thread.name = u'GIT thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
     logging.debug('==== thread name is ' + git_thread.name.encode('utf-8'))
 
+def make_package(type, room, content=u'', subtype=u'', user=u'', nick=u''):
+    d = (type, subtype, {u'room': room, u'content': content, u'user': user, u'nick': nick})
+    return d
+
 class communicate_with_lianmeng:
     q_out = None
     q_in = None
-    def make_package(self, room, user, nick, keyword):
-        d = {u'room': room, u'user': user, u'nick': nick, u'keyword': keyword}
-        return d
 
-    def send_msg_to_lianmeng(self, type, package):
+    def send_msg_to_lianmeng(self,package):
         try:
-            self.q_out.put_nowait((type, package))
+            self.q_out.put_nowait(package)
             return SUCCESS
         except Queue.Full:
             return QUEUE_FULL
 
+    def browser_init(self):
+        # TODO: 启动联盟browser线程，这里应该按照group表依次获取room_name，依次启动线程，在后续随用随开的时候，这里的启动流程就可以在第一次
+        # TODO: 操作时再启动
+        room_name = GetRoomUserNameByNickName(TARGET_ROOM)
+        package = make_package(type=u'cmd', subtype=u'init', room=room_name)
+        ret = self.send_msg_to_lianmeng(package)
+        if ret == QUEUE_FULL:
+            log_and_send_error_msg('browser init failed', '', 'Queue full')
 
-    def send_goods_to_user(self, package):
-        p = threading.Thread(target=SendGoodsToUser, args=(package[u'room'], package[u'user'], package[u'nick']))
-        p.name = u'SendGoodsToUser, %s, %s' % (time.strftime('%d_%H%M%S', time.localtime(time.time())), package[u'nick'])
+    def send_goods_to_user(self, msg):
+        p = threading.Thread(target=SendGoodsToUser, args=(msg[u'room'], msg[u'user'], msg[u'nick']))
+        p.name = u'SendGoodsToUser, %s, %s' % (time.strftime('%d_%H%M%S', time.localtime(time.time())), msg[u'nick'])
         p.setDaemon(True)
         p.start()
         logging.debug('==== thread name is ' + p.name)
@@ -1502,23 +1511,32 @@ class communicate_with_lianmeng:
     def receive_from_lianmeng_thread(self):
         while True:
             logging.info('开始接收来自lianmeng进程命令')
-            type, msg = self.q_in.get()
-            logging.debug('收到lianmeng进程命令, %s %s' % (type, msg))
+            package = self.q_in.get()
+            type = package[0]
+            sub_type = package[1]
+            msg = package[2]
+            logging.debug('收到lianmeng进程命令, %s %s %s' % (type, sub_type, msg))
             if type == u'response':
-                if msg[u'result'] == SUCCESS:
-                    self.send_goods_to_user(msg)
-                elif msg[u'result'] == LM_NO_GOODS:
-                    SendMessage('@msg@%s' % (('@%s 没有找到商品，换个搜索词试试吧') % msg[u'nick']), msg[u'room'])
-                elif msg[u'result'] <= LM_RETRY_TIME_OUT:
-                    SendMessage('@msg@%s' % (('@%s 网络出了些问题，稍后再试吧') % msg[u'nick']), msg[u'room'])
-            else:
-                if type == u'login':
+                if sub_type == u'rfind':
+                    if msg[u'content'] == SUCCESS:
+                        self.send_goods_to_user(msg)
+                    elif msg[u'content'] == LM_NO_GOODS:
+                        SendMessage('@msg@%s' % (('@%s 没有找到商品，换个搜索词试试吧') % msg[u'nick']), msg[u'room'])
+                    elif msg[u'content'] == LM_RETRY_TIME_OUT:
+                        SendMessage('@msg@%s' % (('@%s 网络出了些问题，稍后再试吧') % msg[u'nick']), msg[u'room'])
+                elif sub_type == u'rinit':
+                    if msg[u'content'] == SUCCESS:
+                        pass
+                    elif msg[u'content'] == LM_RETRY_TIME_OUT:
+                        log_and_send_error_msg('浏览器初始化失败', '', 'RETRY TIME OUT')
+            elif type == u'notice':
+                if sub_type == u'login':
                     SendMessageToRoom(INNER_ROOM_NICK_NAME, '@msg@%s' % '请登录淘宝账号')
-                    SendMessageToRoom(INNER_ROOM_NICK_NAME, '@img@%s' % msg)
-                elif type == u'result':
-                    if msg == u'success':
+                    SendMessageToRoom(INNER_ROOM_NICK_NAME, '@img@%s' % msg[u'content'])
+                elif sub_type == u'rlogin':
+                    if msg[u'content'] == u'success':
                         SendMessageToRoom(INNER_ROOM_NICK_NAME, '@msg@%s' % '淘宝登录成功')
-                    elif msg == u'fail':
+                    elif msg[u'content'] == u'fail':
                         SendMessageToRoom(INNER_ROOM_NICK_NAME, '@msg@%s' % '淘宝登录失败')
 
     def create_receive_from_lianmeng_thread(self):
@@ -1555,7 +1573,7 @@ class communicate_with_main:
 
 def init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     logging.info('init_thread: 创建GIT线程')
-    CreateGitThread()
+    # CreateGitThread()
     logging.info('init_thread: 创建CLEAN线程')
     CreateCleanThread()
     logging.info('init_thread: 创建接收main进程命令的线程')
@@ -1570,6 +1588,7 @@ def init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wech
     communicate_with_lianmeng.q_out = q_wechat_lianmeng
     communicate_with_lianmeng.q_in = q_lianmeng_wechat
     communicate_with_lianmeng().create_receive_from_lianmeng_thread()
+    communicate_with_lianmeng().browser_init()
 
 def create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     thread = threading.Thread(target=init_thread, args=(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat))
@@ -1580,8 +1599,8 @@ def create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianme
 
 def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     logging.info('wechat_main: 进程开始')
-    itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=False)
-    # itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=True)
+    # itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=False)
+    itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=True)
     logging.info('wechat_main: 创建init进程开始')
     create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat)
     itchat.run()
