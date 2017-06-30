@@ -1235,7 +1235,7 @@ class MyFrame(wx.Frame):
             logging.error('==== 输入数据有误')
             return
 
-        integral = int(round(float(price) * (1 - eval(prop)/100.0) * INTEGRAL_GOOD_PROP))
+        integral = int(round(float(price) * (1 - (eval(prop)-5)/100.0) * INTEGRAL_GOOD_PROP))
         c_points = 0 - integral
         ret = Database().DatabaseChangePoints(inner_id, c_points)
         if ret == 0:
