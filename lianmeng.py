@@ -27,10 +27,10 @@ class browser:
         self.q_out = Queue.Queue(3)
         self.headers = {'User-Agent':'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'}
         self.package = {}
-        self.browser_name = name
+        self.browser_name = name # room_user_name
         self.__init_qin_thread()
 
-    def __invoke_cmd(self, type, msg):
+    def __invoke_cmd(self, type, package):
         '''subclasses should implement this method
         '''
         pass
@@ -44,18 +44,23 @@ class browser:
 
     def __qin_thread(self):
         while True:
-            logging.info('浏览器【%s】开始接收命令' % self.browser_name)
-            type, msg = self.q_in.get()
-            logging.debug('浏览器收到命令, %s %s' % (type, msg))
-            self.__invoke_cmd(type, msg)
+            logging.info(u'浏览器【%s】开始接收' % self.browser_name)
+            type, package = self.q_in.get()
+            logging.debug(u'浏览器收到命令, %s %s' % (type, package))
+            self.__invoke_cmd(type, package)
 
-    def __send_msg_to_q(self, package):
-        logging.info('浏览器【%s】发送命令 %s' % (self.browser_name, package))
-            self.q_out.put(package)
+    def __send_msg_to_q(self, type, package):
+        logging.info(u'浏览器【%s】开始发送，type:%s， subtype:%s，msg:%s' %
+                     (self.browser_name, type, package['subtype'], package['msg']))
+        self.q_out.put(type, package)
+
+    def __make_package(self, type, msg):
+
+
 
 class browser_selenium(browser):
     def __init__(self, name):
-        browser.__init__(name)
+        browser.__init__(self, name)
         self.options = webdriver.ChromeOptions()
         self.options.add_argument('headless')
         self.options.add_argument('disable-gpu')
@@ -65,8 +70,8 @@ class browser_selenium(browser):
         self.retry_time = 0
 
 class lianmeng_browser(browser_selenium):
+
     def __click_must_ok(self, button_class_name):
-        # 确保button本身在点击后消失
         find_button = self.browser.find_element_by_css_selector if button_class_name.startswith('#') else self.browser.find_element_by_class_name
         cnt = 0
         while True:
@@ -120,7 +125,7 @@ class lianmeng_browser(browser_selenium):
             return SUCCESS
         except Exception,e:
             logging.error(u'页面出现错误，%s' % e)
-            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + '__get_excel_err.png')
+            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + 'browser_get_excel_err.png')
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
@@ -149,7 +154,8 @@ class lianmeng_browser(browser_selenium):
                 code_image_path = CODE_IMAGE_FOLD_PATH + 'codeimage_%s.jpg' % cur_time
                 self.__download(img_url, code_image_path)
                 logging.debug(u'将二维码发送给用户登录')
-                self.__send_msg_to_wechat('login', code_image_path)
+                package = make_package(room=self.browser_name, subtype='login', msg=code_image_path)
+                self.__send_msg_to_q('notice', package)
                 # 判断是否登录成功
                 times = 0
                 while True:
@@ -159,7 +165,8 @@ class lianmeng_browser(browser_selenium):
                         logging.debug(u'登录成功')
                         os.remove(code_image_path)
                         self.retry_time = 0
-                        self.q_out.put(('result', 'success'))
+                        package = make_package(room=self.browser_name, subtype='rlogin', msg='success')
+                        self.__send_msg_to_q('notice', package)
                         return SUCCESS
                     else:
                         times +=1
@@ -167,7 +174,8 @@ class lianmeng_browser(browser_selenium):
                             logging.debug(u'超过一分钟未登录，登录失败')
                             os.remove(code_image_path)
                             self.retry_time = 0
-                            self.q_out.put(('result', 'fail'))
+                            package = make_package(room=self.browser_name, subtype='rlogin', msg='fail')
+                            self.__send_msg_to_q('notice', package)
                             return LM_LOG_IN_TIME_OUT
             else:
                 logging.debug(u'不用再次登录')
@@ -175,16 +183,13 @@ class lianmeng_browser(browser_selenium):
                 return SUCCESS
         except Exception, e:
             logging.error(u'页面出现错误，%s' % e)
-            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + '__login_err.png')
+            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + 'broswer_login_err.png')
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
                 return LM_RETRY_TIME_OUT
             self.browser.refresh()
             return self.__login()
-
-    def __send_msg_to_wechat(self, type, package):
-        self.q_out.put((type, package))
 
     def __get_product_from_selection_room(self):
         try:
@@ -226,7 +231,7 @@ class lianmeng_browser(browser_selenium):
             return SUCCESS
         except Exception, e:
             logging.error(u'页面出现错误，%s' % e)
-            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + '__get_product_from_selection_room_err.png')
+            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_get_product_from_selection_room_err.png')
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
@@ -303,8 +308,9 @@ class lianmeng_browser(browser_selenium):
             return path
         session.close()
         
-    def ali_search(self, keyword, search_dpyhj):
+    def __ali_search(self, search_dpyhj):
         try:
+            keyword = self.package['keyword']
             logging.debug(u'开始搜索[%s]' % keyword)
             begin_time = time.time()
             self.__record_search_history()
@@ -332,22 +338,22 @@ class lianmeng_browser(browser_selenium):
             if doc('div.no-data-list'):
                 logging.debug(u'没有找到商品')
                 return LM_NO_GOODS
-            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + 'ali_search_err.png')
+            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_ali_search_err.png')
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
                 return LM_RETRY_TIME_OUT
-            return self.ali_search(keyword)
+            return self.__ali_search(search_dpyhj)
         except Exception ,e:
             logging.error(u'页面出现错误，%s' % e)
-            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + 'ali_search_err.png')
+            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_ali_search_err.png')
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
                 return LM_RETRY_TIME_OUT
-            return self.ali_search(keyword)
+            return self.__ali_search(search_dpyhj)
 
-    def init_url(self):
+    def __init_url(self):
         try:
             logging.info(u'开始初始化浏览器')
             url =  'http://pub.alimama.com/'
@@ -357,24 +363,40 @@ class lianmeng_browser(browser_selenium):
             if ret < 0:
                 return ret
             logging.info(u'初始化成功')
-            # self.retry_time = 0
+            self.retry_time = 0
             return 0
         except Exception, e:
             logging.info(u'初始化失败，%s' % e)
-            # self.retry_time +=1
-            # if self.retry_time >= RETRY_TIME:
-            #     return -1
-            return self.init_browser()
+            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_init_url_err.png')
+            self.retry_time +=1
+            if self.retry_time >= RETRY_TIMES:
+                self.retry_time = 0
+                return LM_RETRY_TIME_OUT
+            return self.__init_url()
 
     def __invoke_cmd(self, type, msg):
         if type == 'find':
-            self.ali_search()
+            logging.info(u'browser %s: 收到命令来自用户【%s】，开始查找【%s】' % (self.browser_name, msg['nick'], msg['keyword']))
+            self.package = msg
+            result = self.__ali_search(SEARCH_DPYHJ)
+            if result < 0:
+                if result == LM_RETRY_TIME_OUT:
+                    package = self.
+                if result == LM_NO_GOODS and SEARCH_DPYHJ == 1:
+                    logging.debug(u'未找到优惠券商品，转为查找没有优惠券的商品')
+                    result = self.__ali_search(0)
+                elif result == LM_LOG_IN_TIME_OUT:
+
+            response_package = make_package(room=msg['room'], user=msg['user'], nick=msg['nick'], result=result)
+            self.q_out.put(('response', response_package))
         elif type == 'init':
-            self.__init_url()
+            ret = self.__init_url()
+            if ret < 0:
 
 
-def make_package(room=u'', user=u'', nick=u'', result=SUCCESS):
-    d = {'room':room, 'user':user, 'nick':nick, 'result':result}
+
+def make_package(room, msg, subtype=u'', user=u'', nick=u''):
+    d = {'room':room, 'msg':msg, 'subcmd':subtype, 'user':user, 'nick':nick}
     return d
 
 lianmeng_thread_list = []
