@@ -24,7 +24,7 @@ class browser:
         self.db_table_search_goods = self.client[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_GOODS]
         self.db_table_search_history = self.client[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_HISTORY]
         self.options = webdriver.ChromeOptions()
-        # self.options.add_argument('headless')
+        self.options.add_argument('headless')
         self.options.add_argument('disable-gpu')
         self.options.add_argument('window-size=1600x900')
         self.browser = webdriver.Chrome(chrome_options=self.options)
