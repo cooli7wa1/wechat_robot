@@ -680,10 +680,10 @@ def text_command_router(msg, nick_name):
         logging.debug('==== 开始')
         to_name = msg['FromUserName']
         user_name = msg['ActualUserName']
-
-        if msg['Text'] == u'看活动':
+        text = msg['Text'].strip()
+        if text == u'看活动':
             Template().TemplateSendActivity(to_name)
-        elif msg['Text'] == u'查积分':
+        elif text == u'查积分':
             ret = user_view_points(user_name, nick_name)
             if ret < 0:
                 if ret == WECHAT_NOT_FIND:
@@ -697,7 +697,7 @@ def text_command_router(msg, nick_name):
             else:
                 zhifubao_mark = AccountMark(UserName_InnerId[user_name][u'ZhiFuBaoZH'])
                 SendMessage('@msg@%s' % ('@%s 亲，您的支付宝账号(%s)的当前积分为：%s' % (nick_name, zhifubao_mark, ret)), to_name)
-        elif msg['Text'] == u'签到':
+        elif text == u'签到':
             ret = user_check_in(user_name, nick_name)
             if ret < 0:
                 if ret == WECHAT_ALREADY_CHECKIN:
@@ -713,13 +713,13 @@ def text_command_router(msg, nick_name):
                 zhifubao_mark = AccountMark(UserName_InnerId[user_name][u'ZhiFuBaoZH'])
                 SendMessage('@msg@%s' % ('@%s 亲，签到成功\n您的支付宝账号(%s)的当前积分为：%s' % (nick_name, zhifubao_mark, user_view_points(user_name, nick_name))), to_name)
                 # Template().TemplateSendCommand(msg[to_name])
-        elif msg['Text'] == u'帮助':
+        elif text == u'帮助':
             Template().TemplateSendCommand(to_name)
-        elif msg['Text'] == u'积分玩法':
+        elif text == u'积分玩法':
             Template().TemplateSendIntegralregular(to_name)
-        elif msg['Text'] == u'积分商品':
+        elif text == u'积分商品':
             Template().TemplateSendIntegralGood(to_name)
-        elif msg['Text'] == u'兑换流程':
+        elif text == u'兑换流程':
             Template().TemplateSendExchangeProcess(to_name)
         logging.debug('==== 结束')
         return
@@ -732,7 +732,7 @@ def master_command_router(msg):
     try:
         logging.debug('==== 开始')
         to_name = msg['FromUserName']
-        text = msg['Text']
+        text = msg['Text'].strip()
         if text == u'上传数据':
             SendMessage('@msg@%s' % ('主人您好，当前命令是： %s' % text), to_name)
             if UpdateToGit(is_robot=False, is_data=True) == 0:
@@ -880,12 +880,13 @@ def group_text_reply(msg):
             SendMessage('@msg@%s' % ('@%s O，NO，出了一些问题，稍后再试吧' % msg[u'ActualNickName']), msg[u'FromUserName'])
             return
         nick_name = member_info[u'DisplayName'] if member_info[u'DisplayName'] else member_info[u'NickName']
-        if msg[u'Text'] in COMMAND_LIST:
+        text = msg[u'Text'].strip()
+        if text in COMMAND_LIST:
             logging.debug('==== 来自：%s，聊天内容：%s' % (nick_name, msg[u'Text']))
             text_command_router(msg, nick_name)
-        elif re.match(u'找 .*', msg[u'Text']):
-            key_word = msg[u'Text'][2:].strip()
-            logging.debug('==== 来自：%s，收到查找商品命令: %s' % (nick_name, msg[u'Text']))
+        elif re.match(u'找 .*', text):
+            key_word = text[2:].strip()
+            logging.debug('==== 来自：%s，收到查找商品命令: %s' % (nick_name, text))
             package = make_package(room=msg[u'FromUserName'], user=msg[u'ActualUserName'], nick=nick_name,
                                    content=key_word, type=u'cmd', subtype=u'find')
             ret = communicate_with_lianmeng().send_msg_to_lianmeng(package)
@@ -893,7 +894,7 @@ def group_text_reply(msg):
                 SendMessage('@msg@%s' % ('@%s 当前查找人数太多，请稍后再试' % nick_name), msg[u'FromUserName'])
                 return
             SendMessage('@msg@%s' % ('@%s 正在为您查找商品【%s】，请稍等...' % (nick_name, key_word)), msg[u'FromUserName'])
-        elif msg[u'Text'] == u'下一页':
+        elif text == u'下一页':
             logging.debug('==== 收到命令，下一页')
             communicate_with_lianmeng().send_goods_to_user({u'room': msg[u'FromUserName'], u'user': msg[u'ActualUserName'], u'nick': nick_name})
         elif GetRoomUserNameByNickName(INNER_ROOM_NICK_NAME) == msg[u'FromUserName']:
