@@ -765,7 +765,8 @@ def master_command_router(msg):
                 SendMessage('@msg@%s' % json.dumps(data_user, ensure_ascii=False, encoding='utf-8'), to_name)
         elif text == u'重启联盟':
             SendMessage('@msg@%s' % ('主人您好，当前命令是：%s' % text), to_name)
-            communicate_with_main().send_to_main(u'cmd', u'rs_lm_process')
+            package = make_package(type=u'cmd', subtype=u'rs')
+            communicate_with_main().send_to_main(package)
         elif re.match(u'.*#.*#.*#ltj_.*', text):
             cmd, zhifubao, real_nick_name, inner_id = text.split('#')
             SendMessage('@msg@%s' % ('主人您好，收到命令：%s，正在处理..' % text), to_name)
@@ -885,8 +886,9 @@ def group_text_reply(msg):
         elif re.match(u'找 .*', msg[u'Text']):
             key_word = msg[u'Text'][2:].strip()
             logging.debug('==== 来自：%s，收到查找商品命令: %s' % (nick_name, msg[u'Text']))
-            package = communicate_with_lianmeng().make_package(room=msg[u'FromUserName'], user=msg[u'ActualUserName'], nick=nick_name, keyword=key_word)
-            ret = communicate_with_lianmeng().send_msg_to_lianmeng(u'find', package)
+            package = make_package(room=msg[u'FromUserName'], user=msg[u'ActualUserName'], nick=nick_name,
+                                   content=key_word, type=u'cmd', subtype=u'find')
+            ret = communicate_with_lianmeng().send_msg_to_lianmeng(package)
             if ret == QUEUE_FULL:
                 SendMessage('@msg@%s' % ('@%s 当前查找人数太多，请稍后再试' % nick_name), msg[u'FromUserName'])
                 return
@@ -1071,12 +1073,12 @@ def ItchatMessageTextSingle(msg):
 ################ UI界面相关 #################
 
 class TextWindow(wx.TextCtrl):
-    def __init__(self, parent, id=-1, value="", pos=wx.DefaultPosition, size=(300, 25)):
+    def __init__(self, parent, id=-1, value=u'', pos=wx.DefaultPosition, size=(300, 25)):
         wx.TextCtrl.__init__(self, parent, id, value, pos, size)
         self.SetMinSize(size)
 
 class StaticWindow(wx.StaticText):
-    def __init__(self, parent, id=-1, label="", pos=wx.DefaultPosition, size=(100, 25)):
+    def __init__(self, parent, id=-1, label=u'', pos=wx.DefaultPosition, size=(100, 25)):
         wx.StaticText.__init__(self, parent, id, label, pos, size)
         self.SetMinSize(size)
 
@@ -1477,7 +1479,7 @@ def CreateGitThread():
     git_thread.name = u'GIT thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
     logging.debug('==== thread name is ' + git_thread.name.encode('utf-8'))
 
-def make_package(type, room, content=u'', subtype=u'', user=u'', nick=u''):
+def make_package(type, room=u'', content=u'', subtype=u'', user=u'', nick=u''):
     d = (type, subtype, {u'room': room, u'content': content, u'user': user, u'nick': nick})
     return d
 
@@ -1493,13 +1495,13 @@ class communicate_with_lianmeng:
             return QUEUE_FULL
 
     def browser_init(self):
-        # TODO: 启动联盟browser线程，这里应该按照group表依次获取room_name，依次启动线程，在后续随用随开的时候，这里的启动流程就可以在第一次
-        # TODO: 操作时再启动
-        room_name = GetRoomUserNameByNickName(TARGET_ROOM)
-        package = make_package(type=u'cmd', subtype=u'init', room=room_name)
-        ret = self.send_msg_to_lianmeng(package)
-        if ret == QUEUE_FULL:
-            log_and_send_error_msg('browser init failed', '', 'Queue full')
+        # 根据LIST来初始化相应的browser
+        for room in MONITOR_ROOM_LIST:
+            room_name = GetRoomUserNameByNickName(room)
+            package = make_package(type=u'cmd', subtype=u'init', room=room_name)
+            ret = self.send_msg_to_lianmeng(package)
+            if ret == QUEUE_FULL:
+                log_and_send_error_msg('browser init failed', '', 'Queue full')
 
     def send_goods_to_user(self, msg):
         p = threading.Thread(target=SendGoodsToUser, args=(msg[u'room'], msg[u'user'], msg[u'nick']))
@@ -1533,6 +1535,8 @@ class communicate_with_lianmeng:
                 if sub_type == u'login':
                     SendMessageToRoom(INNER_ROOM_NICK_NAME, '@msg@%s' % '请登录淘宝账号')
                     SendMessageToRoom(INNER_ROOM_NICK_NAME, '@img@%s' % msg[u'content'])
+                elif sub_type == u'login_on_phone':
+                    SendMessageToRoom(INNER_ROOM_NICK_NAME, '@msg@%s' % '请在手机上点击确认来登录淘宝账号')
                 elif sub_type == u'rlogin':
                     if msg[u'content'] == u'success':
                         SendMessageToRoom(INNER_ROOM_NICK_NAME, '@msg@%s' % '淘宝登录成功')
@@ -1559,21 +1563,24 @@ class communicate_with_main:
     def receive_from_main_thread(self):
         while True:
             logging.info('开始接收Main进程命令')
-            type, msg = self.q_in.get()
-            logging.debug('收到Main进程命令 %s %s' % (type, msg))
-            if type == 'cmd':
-                if msg == 'UI':
+            package = self.q_in.get()
+            type, subtype, msg = package
+            logging.debug('收到Main进程命令 %s %s %s' % (type, subtype, msg))
+            if type == u'cmd':
+                if subtype == u'UI':
                     logging.debug('开始创建UI线程')
                     CreateUiThread()
-            elif type == 'response':
-                if msg == 'rs_lm_process_ok':
-                    SendMessageToRoom(INNER_ROOM_NICK_NAME, '重启联盟进程OK')
-    def send_to_main(self, type, msg):
-        communicate_with_main.q_out.put((type, msg))
+            elif type == u'response':
+                if subtype == u'rrs':
+                    if msg[u'content'] == u'success':
+                        communicate_with_lianmeng().browser_init()
+                        SendMessageToRoom(INNER_ROOM_NICK_NAME, '重启联盟进程OK')
+    def send_to_main(self, package):
+        communicate_with_main.q_out.put(package)
 
 def init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     logging.info('init_thread: 创建GIT线程')
-    # CreateGitThread()
+    CreateGitThread()
     logging.info('init_thread: 创建CLEAN线程')
     CreateCleanThread()
     logging.info('init_thread: 创建接收main进程命令的线程')
