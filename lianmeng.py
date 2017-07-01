@@ -335,7 +335,7 @@ class browser_lianmeng(browser_selenium):
             return path
         session.close()
         
-    def ali_search(self, search_dpyhj):
+    def ali_search(self, search_dpyhj=SEARCH_DPYHJ, prop=SEARCH_START_TK_RATE):
         try:
             keyword = self.msg['content']
             logging.debug(u'开始搜索[%s]' % keyword)
@@ -343,7 +343,7 @@ class browser_lianmeng(browser_selenium):
             self.record_search_history()
             url = 'http://pub.alimama.com/promo/search/index.htm?q=' + keyword.encode('utf-8').replace(r'\x', '%') + \
                   '&toPage=' + str(SEARCH_PAGE) + '&dpyhq=' + str(search_dpyhj) + '&perPageSize=' + str(SEARCH_PER_PAGE_SIZE) + \
-                  '&freeShipment=' + str(SEARCH_FREE_SHIPMENT) + '&startTkRate=' + str(SEARCH_START_TK_RATE) + '&queryType=' + \
+                  '&freeShipment=' + str(SEARCH_FREE_SHIPMENT) + '&startTkRate=' + str(prop) + '&queryType=' + \
                   str(SEARCH_QUERY_TYPE) + '&sortType=' + str(SEARCH_SORT_TYPE)
             self.browser.get(url)
             logging.debug(u'等待商品加载')
@@ -435,10 +435,18 @@ class browser_lianmeng(browser_selenium):
                 logging.info(u'browser %s: 收到命令来自用户【%s】，开始查找【%s】' % (self.browser_name, msg[u'nick'], msg[u'content']))
                 self.heart_refresh_lock.acquire()
                 self.msg = msg
-                ret = self.ali_search(SEARCH_DPYHJ)
-                if ret == LM_NO_GOODS and SEARCH_DPYHJ == 1:
-                    logging.debug(u'未找到优惠券商品，转为查找没有优惠券的商品')
-                    ret = self.ali_search(0)
+                ret = self.ali_search()
+                if ret == LM_NO_GOODS:
+                    logging.debug(u'【默认比例】 【有优惠券】，未找到商品')
+                    ret = self.ali_search(prop=5)
+                if ret == LM_NO_GOODS:
+                    logging.debug(u'【5%比例】 【有优惠券】，未找到商品')
+                    ret = self.ali_search(search_dpyhj=0)
+                if ret == LM_NO_GOODS:
+                    logging.debug(u'【默认比例】 【无优惠券】，未找到商品')
+                    ret = self.ali_search(search_dpyhj=0, prop=5)
+                if ret == LM_NO_GOODS:
+                    logging.debug(u'【5%比例】 【无优惠券】，未找到商品')
                 package = make_package(u'response', room=self.browser_name, subtype=u'rfind', user=msg[u'user'],
                                        nick=msg[u'nick'], content=ret)
                 communicate_with_wechat().send_to_wechat(package)
