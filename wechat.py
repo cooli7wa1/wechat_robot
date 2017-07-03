@@ -1471,7 +1471,7 @@ def CreateCleanThread():
 def GitUpdateThread():
     while True:
         UpdateToGit()
-        time.sleep(1800)
+        time.sleep(GIT_UPLOAD_INTERVAL)
 
 def CreateGitThread():
     git_thread = threading.Thread(target=GitUpdateThread)

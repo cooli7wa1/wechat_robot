@@ -34,8 +34,9 @@ FATHER_REWARD_PROP = 20  # 父会员获得积分奖励的比例%
 TARGET_ROOM = ROOM_NICK_NAME  # 非回复性消息的发送位置，也是群成员信息的获取位置，可以设成内部群或真实群
 # TARGET_ROOM = INNER_ROOM_NICK_NAME
 SEARCH_CLEAN_TIME_INTERVAL = 60*30  # 30分钟，超过时间间隔的搜索记录会被清楚，包括图片
-LOG_CLEAN_TIME_INTERVAL = 60*60*24*2  # 2天，超过时间间隔的LOG会被清楚
+LOG_CLEAN_TIME_INTERVAL = 60*60*24  # 1天，超过时间间隔的LOG会被清楚
 CLEAN_THREAD_INTERVAL = 60*10  # 10分钟，CLEAN Thread 每隔一段唤醒一次
+GIT_UPLOAD_INTERVAL = 60*60*2  # 2小时，GIT同步的频率
 
 label_ddlr = u"会员名 订单编号 订单价格 佣金比例".split()
 label_jfdh = u"会员名 商品编号 商品价格 佣金比例 订单编号".split()
