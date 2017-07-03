@@ -915,7 +915,6 @@ def huanying(msg):
         if str_list[4].find(u'加入了群聊') == -1 and str_list[4].find(u'分享的二维码加入群聊') == -1:
             return
         logging.debug('==== ' + msg['Content'] + ' ' + GetRoomNickNameByUserName(msg[u'FromUserName']))
-        logging.debug(msg)
         SendMessage('@msg@%s' % ('欢迎亲加入【乐淘家】'), msg['FromUserName'])
         Template().TemplateSendCommand(msg['FromUserName'])
         record_t = msg['Content'] + ' ' + GetRoomNickNameByUserName(msg[u'FromUserName']) + '\r\n'
@@ -1457,6 +1456,8 @@ def CleanThread():
                 if file > reserve_file:
                     os.remove(CODE_IMAGE_FOLD_PATH + reserve_file)
                     reserve_file = file
+        # TODO:clean err img
+
 
         logging.debug('==== CLEAN THREAD 结束')
         time.sleep(CLEAN_THREAD_INTERVAL)

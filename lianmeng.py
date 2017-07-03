@@ -1,6 +1,7 @@
 #coding:utf-8
 import Queue
 import threading
+import traceback
 
 import requests, pymongo, xlrd
 import random
@@ -98,8 +99,8 @@ class browser_lianmeng(browser_selenium):
                 logging.debug('one more click')
             except (NoSuchElementException, ElementNotVisibleException):
                 break
-            except Exception,e:
-                print e
+            except Exception, e:
+                logging.error(u'click出现错误，%s' % traceback.format_exc())
 
     def get_excel(self):
         try:
@@ -138,11 +139,11 @@ class browser_lianmeng(browser_selenium):
             logging.debug(u'获取excel成功')
             return SUCCESS
         except Exception,e:
-            logging.error(u'页面出现错误，%s' % e)
-            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + 'browser_get_excel_err.png')
+            logging.error(u'页面出现错误，%s' % traceback.format_exc())
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
+                self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + 'browser_get_excel_err.png')
                 return LM_RETRY_TIME_OUT
             return self.get_excel()
 
@@ -210,11 +211,11 @@ class browser_lianmeng(browser_selenium):
                 self.retry_time = 0
                 return SUCCESS
         except Exception, e:
-            logging.error(u'页面出现错误，%s' % e)
-            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + 'broswer_login_err.png')
+            logging.error(u'页面出现错误，%s' % traceback.format_exc())
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
+                self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + 'broswer_login_err.png')
                 return LM_RETRY_TIME_OUT
             self.browser.refresh()
             return self.login()
@@ -258,11 +259,11 @@ class browser_lianmeng(browser_selenium):
             logging.debug(u'获取商品成功')
             return SUCCESS
         except Exception, e:
-            logging.error(u'页面出现错误，%s' % e)
-            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_get_product_from_selection_room_err.png')
+            logging.error(u'页面出现错误，%s' % traceback.format_exc())
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
+                self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_get_product_from_selection_room_err.png')
                 return LM_RETRY_TIME_OUT
             self.browser.refresh()
             return self.get_product_from_selection_room()
@@ -361,23 +362,23 @@ class browser_lianmeng(browser_selenium):
             self.retry_time = 0
             return SUCCESS
         except TimeoutException, e:
-            logging.error(u'等待商品加载超时，%s' % e)
+            logging.error(u'等待商品加载超时，%s' % traceback.format_exc())
             doc = pq(self.browser.page_source).remove_namespaces()
             if doc('div.no-data-list'):
                 logging.debug(u'没有找到商品')
                 return LM_NO_GOODS
-            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_ali_search_err.png')
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
+                self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_ali_search_err.png')
                 return LM_RETRY_TIME_OUT
             return self.ali_search(search_dpyhj)
         except Exception ,e:
-            logging.error(u'页面出现错误，%s' % e)
-            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_ali_search_err.png')
+            logging.error(u'页面出现错误，%s' % traceback.format_exc())
             self.retry_time += 1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
+                self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_ali_search_err.png')
                 return LM_RETRY_TIME_OUT
             return self.ali_search(search_dpyhj)
 
@@ -394,11 +395,11 @@ class browser_lianmeng(browser_selenium):
             self.retry_time = 0
             return SUCCESS
         except Exception, e:
-            logging.info(u'初始化失败，%s' % e)
-            self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_init_url_err.png')
+            logging.info(u'初始化失败，%s' % traceback.format_exc())
             self.retry_time +=1
             if self.retry_time >= RETRY_TIMES:
                 self.retry_time = 0
+                self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_init_url_err.png')
                 return LM_RETRY_TIME_OUT
             return self.init_url()
 
