@@ -60,6 +60,7 @@ class browser_selenium(browser):
         self.options.add_argument('disable-gpu')
         self.options.add_argument('window-size=1600x900')
         self.options.add_argument('no-sandbox')
+        self.options.add_argument('disable-logging')
         self.browser = webdriver.Chrome(chrome_options=self.options)
         self.wait = WebDriverWait(self.browser, 5)
         self.retry_time = 0
