@@ -85,6 +85,7 @@ class browser_lianmeng(browser_selenium):
         self.db_table_search_goods = self.client[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_GOODS]
         self.db_table_search_history = self.client[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_HISTORY]
         self.heart_refresh_lock = threading.Lock()
+        self.goods_num = 0
 
     def click_must_ok(self, button_class_name):
         find_button = self.browser.find_element_by_css_selector if button_class_name.startswith('#') else self.browser.find_element_by_class_name
@@ -236,6 +237,7 @@ class browser_lianmeng(browser_selenium):
             logging.debug(u'等待数量更新')
             doc = pq(self.browser.page_source).remove_namespaces()
             goods_num = doc('div.search-result-wrap').find('.block-search-box').length
+            self.goods_num += goods_num
             self.wait.until(EC.text_to_be_present_in_element((By.CSS_SELECTOR, '#J_bar_selected > strong'), str(goods_num)))
             logging.debug(u'点击“加入选品库”')
             self.browser.find_element_by_class_name('add-selection').click()
@@ -337,14 +339,14 @@ class browser_lianmeng(browser_selenium):
             return path
         session.close()
         
-    def ali_search(self, search_dpyhj=SEARCH_DPYHJ, prop=SEARCH_START_TK_RATE):
+    def ali_search(self, search_dpyhj=SEARCH_DPYHJ, prop=SEARCH_START_TK_RATE, num=SEARCH_PER_PAGE_SIZE):
         try:
             keyword = self.msg['content']
             logging.debug(u'开始搜索[%s]' % keyword)
             begin_time = time.time()
             self.record_search_history()
             url = 'http://pub.alimama.com/promo/search/index.htm?q=' + keyword.encode('utf-8').replace(r'\x', '%') + \
-                  '&toPage=' + str(SEARCH_PAGE) + '&dpyhq=' + str(search_dpyhj) + '&perPageSize=' + str(SEARCH_PER_PAGE_SIZE) + \
+                  '&toPage=' + str(SEARCH_PAGE) + '&dpyhq=' + str(search_dpyhj) + '&perPageSize=' + str(num) + \
                   '&freeShipment=' + str(SEARCH_FREE_SHIPMENT) + '&startTkRate=' + str(prop) + '&queryType=' + \
                   str(SEARCH_QUERY_TYPE) + '&sortType=' + str(SEARCH_SORT_TYPE)
             self.browser.get(url)
@@ -438,17 +440,18 @@ class browser_lianmeng(browser_selenium):
                 self.heart_refresh_lock.acquire()
                 self.msg = msg
                 ret = self.ali_search()
-                if ret == LM_NO_GOODS:
-                    logging.debug(u'【默认比例】 【有优惠券】，未找到商品')
-                    ret = self.ali_search(prop=5)
-                if ret == LM_NO_GOODS:
-                    logging.debug(u'【5%比例】 【有优惠券】，未找到商品')
-                    ret = self.ali_search(search_dpyhj=0)
-                if ret == LM_NO_GOODS:
-                    logging.debug(u'【默认比例】 【无优惠券】，未找到商品')
-                    ret = self.ali_search(search_dpyhj=0, prop=5)
-                if ret == LM_NO_GOODS:
-                    logging.debug(u'【5%比例】 【无优惠券】，未找到商品')
+                if ret == LM_NO_GOODS or self.goods_num < SEARCH_PER_PAGE_SIZE:
+                    logging.debug(u'【默认比例】 【有优惠券】，未找到或未找全商品')
+                    ret = self.ali_search(prop=5, num=SEARCH_PER_PAGE_SIZE-self.goods_num)
+                if ret == LM_NO_GOODS or self.goods_num < SEARCH_PER_PAGE_SIZE:
+                    logging.debug(u'【5%比例】 【有优惠券】，未找到或未找全商品')
+                    ret = self.ali_search(search_dpyhj=0, num=SEARCH_PER_PAGE_SIZE-self.goods_num)
+                if ret == LM_NO_GOODS or self.goods_num < SEARCH_PER_PAGE_SIZE:
+                    logging.debug(u'【默认比例】 【无优惠券】，未找到或未找全商品')
+                    ret = self.ali_search(search_dpyhj=0, prop=5, num=SEARCH_PER_PAGE_SIZE-self.goods_num)
+                if ret == LM_NO_GOODS or self.goods_num < SEARCH_PER_PAGE_SIZE:
+                    logging.debug(u'【5%比例】 【无优惠券】，未找到或未找全商品')
+                self.goods_num = 0
                 package = make_package(u'response', room=self.browser_name, subtype=u'rfind', user=msg[u'user'],
                                        nick=msg[u'nick'], content=ret)
                 communicate_with_wechat().send_to_wechat(package)

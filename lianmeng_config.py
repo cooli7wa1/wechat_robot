@@ -16,7 +16,7 @@ HEART_HOURS_END = 24
 SEARCH_PAGE = 1
 # 店铺优惠券
 SEARCH_DPYHJ = 1
-# 每页商品数
+# 查找的商品数（也是每页商品数）
 SEARCH_PER_PAGE_SIZE = 5
 # 包邮
 SEARCH_FREE_SHIPMENT = 1
