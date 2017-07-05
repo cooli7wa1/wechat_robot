@@ -335,7 +335,7 @@ class browser_lianmeng(browser_selenium):
         session.close()
         
     def ali_search(self, search_dpyhj=SEARCH_DPYHJ, start_prop=SEARCH_START_TK_RATE,
-                   end_prop = SEARCH_END_TK_RATE, num=SEARCH_PER_PAGE_SIZE):
+                   end_prop=SEARCH_END_TK_RATE, num=SEARCH_PER_PAGE_SIZE):
         try:
             keyword = self.msg['content']
             logging.debug(u'开始搜索[%s]' % keyword)
