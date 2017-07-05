@@ -388,7 +388,7 @@ class browser_lianmeng(browser_selenium):
                 self.retry_time = 0
                 self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_ali_search_err.png')
                 return LM_RETRY_TIME_OUT
-            return self.ali_search(search_dpyhj, start_prop, end_prop, num)
+            return self.ali_search(search_dpyhj, start_prop, end_prop)
         except Exception ,e:
             logging.error(u'页面出现错误，%s' % traceback.format_exc())
             self.retry_time += 1
@@ -396,7 +396,7 @@ class browser_lianmeng(browser_selenium):
                 self.retry_time = 0
                 self.browser.get_screenshot_as_file(PICTURES_FOLD_PATH + self.browser_name + '_browser_ali_search_err.png')
                 return LM_RETRY_TIME_OUT
-            return self.ali_search(search_dpyhj, start_prop, end_prop, num)
+            return self.ali_search(search_dpyhj, start_prop, end_prop)
 
     def init_url(self):
         try:
