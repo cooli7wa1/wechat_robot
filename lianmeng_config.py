@@ -5,6 +5,7 @@ import os
 SERVICE_ARGS = ['--load-images=false', '--disk-cache=true', '--output-encoding=utf8', '--script-encoding=utf8']
 DOWNLOAD_IMG_SIZE = '_400x400'
 RETRY_TIMES = 5
+HEART_URL ='http://pub.alimama.com/manage/selection/list.htm'
 HEART_DELAY = 10*60  # 两次检测的间隔
 # HEART_DELAY = 10
 # 检测登录状态的时间段
