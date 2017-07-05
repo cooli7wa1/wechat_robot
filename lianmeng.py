@@ -30,7 +30,6 @@ class browser:
         self.q_in = Queue.Queue(3)
         self.q_out = q_lianmeng_wechat
         self.headers = {'User-Agent':'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'}
-        self.msg = {}
         self.browser_name = name # room_user_name
 
     def invoke_cmd(self, package):
@@ -85,6 +84,7 @@ class browser_lianmeng(browser_selenium):
         self.db_table_search_goods = self.client[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_GOODS]
         self.db_table_search_history = self.client[MONGO_DB_LIANMENG][MONGO_TABLE_LM_SEARCH_HISTORY]
         self.heart_refresh_lock = threading.Lock()
+        self.msg = {}
         self.goods_num = 0
 
     def click_must_ok(self, button_class_name):
@@ -133,7 +133,7 @@ class browser_lianmeng(browser_selenium):
                 path = self.download_main_pic(good[u'商品主图'] + DOWNLOAD_IMG_SIZE)
                 good['主图存储路径'] = path
                 goods_detail[str(i-1)] = good
-            self.save_to_mongo(goods_detail, append=False if self.goods_num == 0 else True)
+            self.save_to_mongo(goods_detail)
             logging.debug(u'删除excel')
             os.remove(EXCEL_FILE_PATH)
             self.retry_time = 0
@@ -282,7 +282,7 @@ class browser_lianmeng(browser_selenium):
             self.db_table_search_history.insert(new)
         logging.debug(u'存储到MONGODB HISTORY成功')
 
-    def save_to_mongo(self, goods_detail, append=False):
+    def save_to_mongo(self, goods_detail):
         goods = {}
         time_ori = int(time.time())
         cur_time = time.strftime('%Y%m%d-%H%M%S', time.localtime(time_ori))
@@ -292,32 +292,16 @@ class browser_lianmeng(browser_selenium):
         goods['goods_detail'] = goods_detail
         cursor = self.db_table_search_goods.find({'user': self.msg['user']})
         if cursor.count() == 1:
-            if append:
-                g = cursor.next()['goods']['goods_detail']
-                n = len(g)
-                for i in range(len(goods_detail)):
-                    g[str(n)] = goods_detail[str(i)]
-                    n += 1
-                goods['goods_detail'] = g
-                self.db_table_search_goods.update_one({'user': self.msg['user']},
-                                         {"$set": {'nick': self.msg['nick'],
-                                                   'goods': goods}})
-            else:
-                # del old pic
-                info = cursor.next()
-                for good in info['goods']['goods_detail'].items():
-                    path = good[1][u'主图存储路径']
-                    if os.path.exists(path):
-                        os.remove(path)
-                if 'long_pic' in info['goods']:
-                    for pic in info['goods']['long_pic'].items():
-                        path = pic[1]
-                        if os.path.exists(path):
-                            os.remove(path)
-                self.db_table_search_goods.update_one({'user': self.msg['user']},
-                                         {"$set": {'nick': self.msg['nick'],
-                                                   'goods': goods}})
-        elif cursor.count() == 0:
+            g = cursor.next()['goods']['goods_detail']
+            n = len(g)
+            for i in range(len(goods_detail)):
+                g[str(n)] = goods_detail[str(i)]
+                n += 1
+            goods['goods_detail'] = g
+            self.db_table_search_goods.update_one({'user': self.msg['user']},
+                                     {"$set": {'nick': self.msg['nick'],
+                                               'goods': goods}})
+        else:
             new = {'user':self.msg['user'],
                    'nick':self.msg['nick'],
                    'goods':goods}
@@ -434,6 +418,20 @@ class browser_lianmeng(browser_selenium):
                 self.browser.get('http://pub.alimama.com/')
                 self.login()
                 self.heart_refresh_lock.release()
+    def clean_old_search(self):
+        cursor = self.db_table_search_goods.find({'user': self.msg['user']})
+        if cursor.count() == 1:
+            info = cursor.next()
+            for good in info['goods']['goods_detail'].items():
+                path = good[1][u'主图存储路径']
+                if os.path.exists(path):
+                    os.remove(path)
+            if 'long_pic' in info['goods']:
+                for pic in info['goods']['long_pic'].items():
+                    path = pic[1]
+                    if os.path.exists(path):
+                        os.remove(path)
+            self.db_table_search_goods.delete_one({'user': self.msg['user']})
 
     def invoke_cmd(self, package):
         type, sub_type, msg = package
@@ -450,6 +448,7 @@ class browser_lianmeng(browser_selenium):
                 logging.info(u'browser %s: 收到命令来自用户【%s】，开始查找【%s】' % (self.browser_name, msg[u'nick'], msg[u'content']))
                 self.heart_refresh_lock.acquire()
                 self.msg = msg
+                self.clean_old_search()
                 ret = self.ali_search()
                 if ret == LM_NO_GOODS or self.goods_num < SEARCH_PER_PAGE_SIZE:
                     logging.debug(u'【默认比例】 【有优惠券】，未找到或未找全商品')
