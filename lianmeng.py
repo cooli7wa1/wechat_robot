@@ -131,7 +131,7 @@ class browser_lianmeng(browser_selenium):
                 good = dict(zip(title, product))
                 logging.debug(u'下载图片')
                 path = self.download_main_pic(good[u'商品主图'] + DOWNLOAD_IMG_SIZE)
-                good['主图存储路径'] = path
+                good[u'主图存储路径'] = path
                 goods_detail[str(i-1)] = good
             self.save_to_mongo(goods_detail)
             logging.debug(u'删除excel')
@@ -237,7 +237,6 @@ class browser_lianmeng(browser_selenium):
             logging.debug(u'等待数量更新')
             doc = pq(self.browser.page_source).remove_namespaces()
             goods_num = doc('div.search-result-wrap').find('.block-search-box').length
-            self.goods_num += goods_num
             self.wait.until(EC.text_to_be_present_in_element((By.CSS_SELECTOR, '#J_bar_selected > strong'), str(goods_num)))
             logging.debug(u'点击“加入选品库”')
             self.browser.find_element_by_class_name('add-selection').click()
@@ -291,21 +290,40 @@ class browser_lianmeng(browser_selenium):
         goods['cursor'] = 0
         goods['goods_detail'] = goods_detail
         cursor = self.db_table_search_goods.find({'user': self.msg['user']})
+        actual_goods_num = 0
         if cursor.count() == 1:
             g = cursor.next()['goods']['goods_detail']
             n = len(g)
             for i in range(len(goods_detail)):
-                g[str(n)] = goods_detail[str(i)]
-                n += 1
+                for j in range(len(g)):  # 判断商品是否已经存在
+                    if g[str(j)][u'商品详情页链接地址'] == goods_detail[str(i)][u'商品详情页链接地址']:
+                        # 清除已存在商品的图片
+                        path = goods_detail[str(i)][u'主图存储路径']
+                        if os.path.exists(path):
+                            os.remove(path)
+                        break
+                else:  # 如果不存在，那么增加商品
+                    g[str(n)] = goods_detail[str(i)]
+                    n += 1
+                    actual_goods_num += 1
+                    if self.goods_num + actual_goods_num >= SEARCH_PER_PAGE_SIZE:  # 商品数量够了就退出
+                        # 清除剩余商品的图片
+                        for k in range(i+1, len(goods_detail)):
+                            path = goods_detail[str(k)][u'主图存储路径']
+                            if os.path.exists(path):
+                                os.remove(path)
+                        break
             goods['goods_detail'] = g
             self.db_table_search_goods.update_one({'user': self.msg['user']},
                                      {"$set": {'nick': self.msg['nick'],
                                                'goods': goods}})
         else:
+            actual_goods_num = len(goods_detail)
             new = {'user':self.msg['user'],
                    'nick':self.msg['nick'],
                    'goods':goods}
             self.db_table_search_goods.insert(new)
+        self.goods_num += actual_goods_num
         logging.debug(u'存储到MONGODB成功')
 
     def download(self, url,path,cookies=None):
@@ -335,14 +353,14 @@ class browser_lianmeng(browser_selenium):
         session.close()
         
     def ali_search(self, search_dpyhj=SEARCH_DPYHJ, start_prop=SEARCH_START_TK_RATE,
-                   end_prop=SEARCH_END_TK_RATE, num=SEARCH_PER_PAGE_SIZE):
+                   end_prop=SEARCH_END_TK_RATE):
         try:
             keyword = self.msg['content']
             logging.debug(u'开始搜索[%s]' % keyword)
             begin_time = time.time()
             self.record_search_history()
             url = 'http://pub.alimama.com/promo/search/index.htm?q=' + keyword.encode('utf-8').replace(r'\x', '%') + \
-                  '&toPage=' + str(SEARCH_PAGE) + '&dpyhq=' + str(search_dpyhj) + '&perPageSize=' + str(num) + \
+                  '&toPage=' + str(SEARCH_PAGE) + '&dpyhq=' + str(search_dpyhj) + '&perPageSize=' + str(SEARCH_PER_PAGE_SIZE) + \
                   '&freeShipment=' + str(SEARCH_FREE_SHIPMENT) + '&startTkRate=' + str(start_prop) + '&endTkRate=' + \
                   str(end_prop) + '&queryType=' + str(SEARCH_QUERY_TYPE) + '&sortType=' + str(SEARCH_SORT_TYPE)
             self.browser.get(url)
@@ -451,17 +469,17 @@ class browser_lianmeng(browser_selenium):
                 self.msg = msg
                 self.clean_old_search()
                 ret = self.ali_search()
-                if ret == LM_NO_GOODS or self.goods_num < SEARCH_PER_PAGE_SIZE:
+                if ret == LM_NO_GOODS or (ret == SUCCESS and self.goods_num < SEARCH_PER_PAGE_SIZE):
                     logging.debug(u'【默认比例】 【有优惠券】，未找到或未找全商品, 当前商品数：%d' % self.goods_num)
-                    ret = self.ali_search(start_prop=5, end_prop=SEARCH_END_TK_RATE-0.01, num=SEARCH_PER_PAGE_SIZE-self.goods_num)
-                if ret == LM_NO_GOODS or self.goods_num < SEARCH_PER_PAGE_SIZE:
+                    ret = self.ali_search(start_prop=5, end_prop=SEARCH_START_TK_RATE-0.01)
+                if ret == LM_NO_GOODS or (ret == SUCCESS and self.goods_num < SEARCH_PER_PAGE_SIZE):
                     logging.debug(u'【5%%比例】 【有优惠券】，未找到或未找全商品, 当前商品数：%d' % self.goods_num)
-                    ret = self.ali_search(search_dpyhj=0, num=SEARCH_PER_PAGE_SIZE-self.goods_num)
-                if ret == LM_NO_GOODS or self.goods_num < SEARCH_PER_PAGE_SIZE:
-                    logging.debug(u'【默认比例】 【无优惠券】，未找到或未找全商品, 当前商品数：%d' % self.goods_num)
-                    ret = self.ali_search(search_dpyhj=0, start_prop=5, end_prop=SEARCH_END_TK_RATE-0.01, num=SEARCH_PER_PAGE_SIZE-self.goods_num)
-                if ret == LM_NO_GOODS or self.goods_num < SEARCH_PER_PAGE_SIZE:
-                    logging.debug(u'【5%%比例】 【无优惠券】，未找到或未找全商品, 当前商品数：%d' % self.goods_num)
+                    ret = self.ali_search(search_dpyhj=0)
+                if ret == LM_NO_GOODS or (ret == SUCCESS and self.goods_num < SEARCH_PER_PAGE_SIZE):
+                    logging.debug(u'【默认比例】 【不关注优惠券】，未找到或未找全商品, 当前商品数：%d' % self.goods_num)
+                    ret = self.ali_search(search_dpyhj=0, start_prop=5, end_prop=SEARCH_START_TK_RATE-0.01)
+                if ret == LM_NO_GOODS or (ret == SUCCESS and self.goods_num < SEARCH_PER_PAGE_SIZE):
+                    logging.debug(u'【5%%比例】 【不关注优惠券】，未找到或未找全商品, 当前商品数：%d' % self.goods_num)
                 self.goods_num = 0
                 package = make_package(u'response', room=self.browser_name, subtype=u'rfind', user=msg[u'user'],
                                        nick=msg[u'nick'], content=ret)

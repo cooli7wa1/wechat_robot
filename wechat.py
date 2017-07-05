@@ -1018,7 +1018,7 @@ def SendGoodsToUser(room_name, user_name, nick_name):
     to_name = room_name
     if range_end != num:
         SendMessage('@msg@%s' % (('@%s 共找到%d个商品，当前%d/%d页\n回复【下一页】，查看下页商品') %
-                    (nick_name, num, (cursor/GOODS_PER_TIME)+1, (num/GOODS_PER_TIME)+1)), to_name)
+                    (nick_name, num, (cursor/GOODS_PER_TIME)+1, ((num-1)/GOODS_PER_TIME)+1)), to_name)
     else:
         SendMessage('@msg@%s' % (('@%s 共找到%d个商品，当前%d/%d页') %
                     (nick_name, num, (cursor / GOODS_PER_TIME)+1, (num / GOODS_PER_TIME)+1)), to_name)
