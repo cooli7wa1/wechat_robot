@@ -133,7 +133,7 @@ class browser_lianmeng(browser_selenium):
                 path = self.download_main_pic(good[u'商品主图'] + DOWNLOAD_IMG_SIZE)
                 good['主图存储路径'] = path
                 goods_detail[str(i-1)] = good
-            self.save_to_mongo(goods_detail)
+            self.save_to_mongo(goods_detail, append=False if self.goods_num == 0 else True)
             logging.debug(u'删除excel')
             os.remove(EXCEL_FILE_PATH)
             self.retry_time = 0
@@ -282,7 +282,7 @@ class browser_lianmeng(browser_selenium):
             self.db_table_search_history.insert(new)
         logging.debug(u'存储到MONGODB HISTORY成功')
 
-    def save_to_mongo(self, goods_detail):
+    def save_to_mongo(self, goods_detail, append=False):
         goods = {}
         time_ori = int(time.time())
         cur_time = time.strftime('%Y%m%d-%H%M%S', time.localtime(time_ori))
@@ -292,20 +292,31 @@ class browser_lianmeng(browser_selenium):
         goods['goods_detail'] = goods_detail
         cursor = self.db_table_search_goods.find({'user': self.msg['user']})
         if cursor.count() == 1:
-            # del old pic
-            info = cursor.next()
-            for good in info['goods']['goods_detail'].items():
-                path = good[1][u'主图存储路径']
-                if os.path.exists(path):
-                    os.remove(path)
-            if 'long_pic' in info['goods']:
-                for pic in info['goods']['long_pic'].items():
-                    path = pic[1]
+            if append:
+                g = cursor.next()['goods']['goods_detail']
+                n = len(g)
+                for i in range(len(goods_detail)):
+                    g[str(n)] = goods_detail[str(i)]
+                    n += 1
+                goods['goods_detail'] = g
+                self.db_table_search_goods.update_one({'user': self.msg['user']},
+                                         {"$set": {'nick': self.msg['nick'],
+                                                   'goods': goods}})
+            else:
+                # del old pic
+                info = cursor.next()
+                for good in info['goods']['goods_detail'].items():
+                    path = good[1][u'主图存储路径']
                     if os.path.exists(path):
                         os.remove(path)
-            self.db_table_search_goods.update_one({'user': self.msg['user']},
-                                     {"$set": {'nick': self.msg['nick'],
-                                               'goods': goods}})
+                if 'long_pic' in info['goods']:
+                    for pic in info['goods']['long_pic'].items():
+                        path = pic[1]
+                        if os.path.exists(path):
+                            os.remove(path)
+                self.db_table_search_goods.update_one({'user': self.msg['user']},
+                                         {"$set": {'nick': self.msg['nick'],
+                                                   'goods': goods}})
         elif cursor.count() == 0:
             new = {'user':self.msg['user'],
                    'nick':self.msg['nick'],
