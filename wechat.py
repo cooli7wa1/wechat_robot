@@ -757,12 +757,38 @@ def master_command_router(msg):
             lines = lines.strip()
             SendMessage('@msg@%s' % lines, to_name)
         elif re.match(u'查看数据#.*', text):
+            ''' 通过支付宝或者昵称来查找用户信息
+                默认按昵称查找
+            '''
             msg_list = text.split('#')
-            inner_id = u'ltj_' + msg_list[1]
-            SendMessage('@msg@%s' % ('主人您好，当前命令是：%s，会员是：%s' % (msg_list[0], inner_id)), to_name)
-            data_user = Database().DatabaseViewData(inner_id)
-            if data_user > 0:
-                SendMessage('@msg@%s' % json.dumps(data_user, ensure_ascii=False, encoding='utf-8'), to_name)
+            m = msg_list[1]
+            if re.match('\d{11}', m) or re.match('.*@.*\.com', m):
+                SendMessage('@msg@%s' % ('主人您好，当前命令是：%s，支付宝：%s' % (msg_list[0], m)), to_name)
+                user_data = Database().DatabaseSearch(zhifubao=m)
+                if user_data < 0:
+                    SendMessage('@msg@%s' % '寻找用户信息出错，详情查看LOG', to_name)
+                    return
+            else:
+                SendMessage('@msg@%s' % ('主人您好，当前命令是：%s，昵称：%s' % (msg_list[0], m)), to_name)
+                room_user_name = GetRoomUserNameByNickName(TARGET_ROOM)
+                info = get_member_info(room_user_name, member_nick_name=m)
+                nick_name = info[u'DisplayName'] if info[u'DisplayName'] else info[u'NickName']
+                user_data = Database().DatabaseSearch(nick_name=nick_name)
+                if not user_data:
+                    SendMessage('@msg@%s' % '寻找用户信息出错，详情查看LOG', to_name)
+                    return
+            user_data['_id'] = str(user_data['_id'])
+            SendMessage('@msg@%s' % json.dumps(user_data, ensure_ascii=False, encoding='utf-8'), to_name)
+        elif re.match(u'计算积分#.*#.*', text):
+            ''' 计算积分商品所需积分
+            '''
+            msg_list = text.split('#')
+            price = msg_list[1]
+            prop = msg_list[2]
+            SendMessage('@msg@%s' % ('主人您好，当前命令是：%s，价格：%s，佣金比例：%s' % (msg_list[0], price, prop)), to_name)
+            integral = int(round(float(price) * (1 - (eval(prop)-5)/100.0) * INTEGRAL_GOOD_PROP))
+            SendMessage('@msg@%s' % ('主人您好，所需积分为：%s' % integral), to_name)
+
         elif text == u'重启联盟':
             SendMessage('@msg@%s' % ('主人您好，当前命令是：%s' % text), to_name)
             package = make_package(type=u'cmd', subtype=u'rs')
@@ -1608,8 +1634,8 @@ def create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianme
 
 def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     logging.info('wechat_main: 进程开始')
-    itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=False)
-    # itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=True)
+    # itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=False)
+    itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=True)
     logging.info('wechat_main: 创建init进程开始')
     create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat)
     itchat.run()
