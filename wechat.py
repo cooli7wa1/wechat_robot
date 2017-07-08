@@ -457,6 +457,16 @@ class Template:
         SendMessage('@msg@%s' % lines, to)
         logging.debug('==== 结束')
 
+    def TemplateSendMasterCommand(self, to):
+        logging.debug('==== 开始')
+        lines = ''
+        for line in codecs.open(TEMPLATE_FOLD + u"Master命令模板.txt", 'rb', 'utf-8'):
+            lines += line
+        lines = lines.strip()
+        logging.debug(lines)
+        SendMessage('@msg@%s' % lines, to)
+        logging.debug('==== 结束')
+
     def TemplateSendIntegralregular(self, to):
         logging.debug('==== 开始')
         lines = ''
@@ -553,8 +563,10 @@ class IntegralRecord:
         logging.debug('==== 开始')
         try:
             for line in codecs.open(ORDER_FILE_PATH, 'r', 'utf-8'):
-                if line and line.split(' ')[1] == order:
-                    logging.info('==== 订单已经被会员 ' + line.split(' ')[2] + u' 录入过')
+                if line:
+                    l = line.split(' ')
+                    if l[1] == order:
+                        logging.info('==== 订单已经被会员【%s】与【%s】录入过' % (l[2], l[0]))
                     return -1
             return 0
         finally:
@@ -733,7 +745,9 @@ def master_command_router(msg):
         logging.debug('==== 开始')
         to_name = msg['FromUserName']
         text = msg['Text'].strip()
-        if text == u'上传数据':
+        if text == u'命令':
+            Template().TemplateSendMasterCommand(to_name)
+        elif text == u'上传数据':
             SendMessage('@msg@%s' % ('主人您好，当前命令是： %s' % text), to_name)
             if UpdateToGit(is_robot=False, is_data=True) == 0:
                 SendMessage('@msg@%s' % (text + u' 成功'), to_name)
@@ -779,7 +793,7 @@ def master_command_router(msg):
                     return
             user_data['_id'] = str(user_data['_id'])
             SendMessage('@msg@%s' % json.dumps(user_data, ensure_ascii=False, encoding='utf-8'), to_name)
-        elif re.match(u'计算积分#.*#.*', text):
+        elif re.match(u'计算兑换积分#.*#.*', text):
             ''' 计算积分商品所需积分
             '''
             msg_list = text.split('#')
@@ -788,7 +802,15 @@ def master_command_router(msg):
             SendMessage('@msg@%s' % ('主人您好，当前命令是：%s，价格：%s，佣金比例：%s' % (msg_list[0], price, prop)), to_name)
             integral = int(round(float(price) * (1 - (eval(prop)-5)/100.0) * INTEGRAL_GOOD_PROP))
             SendMessage('@msg@%s' % ('主人您好，所需积分为：%s' % integral), to_name)
-
+        elif re.match(u'计算奖励积分#.*#.*', text):
+            ''' 计算购买商品所奖励积分
+            '''
+            msg_list = text.split('#')
+            price = msg_list[1]
+            prop = msg_list[2]
+            SendMessage('@msg@%s' % ('主人您好，当前命令是：%s，价格：%s，佣金比例：%s' % (msg_list[0], price, prop)), to_name)
+            integral = int(round(float(price) * INTEGRAL_PROP * eval(prop) / 100.0))
+            SendMessage('@msg@%s' % ('主人您好，奖励积分为：%s' % integral), to_name)
         elif text == u'重启联盟':
             SendMessage('@msg@%s' % ('主人您好，当前命令是：%s' % text), to_name)
             package = make_package(type=u'cmd', subtype=u'rs')
@@ -836,6 +858,8 @@ def master_command_router(msg):
                 return
             nick_name = info[u'DisplayName'] if info[u'DisplayName'] else info[u'NickName']
             if cmd == u'更新':
+                '''更新昵称
+                '''
                 ret = Database().DatabaseUpdateNickName(nick_name, zhifubao)
                 if ret < 0:
                     if ret == WECHAT_NICKNAME_EXIST:
@@ -849,6 +873,8 @@ def master_command_router(msg):
                 zhifubao_mark = AccountMark(zhifubao)
                 SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，重新输入命令吧\n支付宝：%s' % (nick_name, zhifubao_mark)))
             elif cmd == u'新':
+                ''' 新用户
+                '''
                 next_id_num = Database().DatabaseUserNextNumber()
                 inner_id = u'ltj_' + str(next_id_num)
                 father = MemberRecord().MemberRecordFindFather(nick_name)
@@ -871,6 +897,8 @@ def master_command_router(msg):
                 zhifubao_mark = AccountMark(zhifubao)
                 SendMessageToRoom(TARGET_ROOM, '@msg@%s' % ('@%s 您的账号已经激活，重新输入命令吧\n支付宝：%s' % (nick_name, zhifubao_mark)))
             elif cmd == u'设置':
+                ''' 设置支付宝
+                '''
                 ret = Database().DatabaseSetZhiFuBao(nick_name, zhifubao)
                 if ret < 0:
                     if ret == WECHAT_ZHIFUBAO_EXIST:
@@ -1006,7 +1034,7 @@ def make_text(dict):
     prop = eval(dict[u'收入比率(%)'])
     if prop > INTEGRAL_REWARD_MAX_PROP:
         prop = INTEGRAL_REWARD_MAX_PROP
-    jifen = int(round((price-youhuiyuan)*10*prop/100.0))
+    jifen = int(round((price-youhuiyuan)*INTEGRAL_PROP*prop/100.0))
     if youhuiyuan:
         text = u'%s\n【优惠券】%d 【积分】%d\n【卷后价】%d\n【领卷下单】%s\n%s,复制这条信息,打开【手机淘宝】即可下单' % \
            (name, youhuiyuan, jifen, price-youhuiyuan, url, kouling)
@@ -1465,11 +1493,11 @@ def CleanThread():
                     # del info self
                     db_table.delete_one({'_id': ObjectId(info['_id'])})
         # clean log
-        logging.debug('==== CLEAN THREAD 正在清理过期LOG')
-        log_files = os.listdir(LOG_FOLD)
-        for file in log_files:
-            if int(file.split('_')[1]) < time_ori - LOG_CLEAN_TIME_INTERVAL:
-                os.remove(LOG_FOLD+file)
+#        logging.debug('==== CLEAN THREAD 正在清理过期LOG')
+#        log_files = os.listdir(LOG_FOLD)
+#        for file in log_files:
+#            if int(file.split('_')[1]) < time_ori - LOG_CLEAN_TIME_INTERVAL:
+#                os.remove(LOG_FOLD+file)
         # clean codeimage, 只保留最后一个
         logging.debug('==== CLEAN THREAD 正在清理残留的codeimage')
         image_files = os.listdir(CODE_IMAGE_FOLD_PATH)
