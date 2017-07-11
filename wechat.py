@@ -566,8 +566,8 @@ class IntegralRecord:
                 if line:
                     l = line.split(' ')
                     if l[1] == order:
-                        logging.info('==== 订单已经被会员【%s】与【%s】录入过' % (l[2], l[0]))
-                    return -1
+                        logging.info('==== 订单已经被会员【%s】于【%s】录入过' % (l[2], l[0]))
+                        return -1
             return 0
         finally:
             IntegralRecord.integral_record_mutex.release()
@@ -1267,7 +1267,7 @@ class MyFrame(wx.Frame):
             zhifubao_mark = AccountMark(info[u'AliInfo'][u'ZhiFuBaoZH'])
             SendMessageToRoom(TARGET_ROOM,
                               '@msg@%s' % ('@%s 亲，您的订单【%s】积分已录入\n'
-                              '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, number, zhifubao_mark, repr(cur_points))))
+                                           '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, number, zhifubao_mark, repr(cur_points))))
             # self.table = MyTable()
             # self.grid.SetTable(self.table, True)
             # self.grid.AutoSize()
