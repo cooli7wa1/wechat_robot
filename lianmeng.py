@@ -566,8 +566,8 @@ class communicate_with_wechat:
                         package = make_package(type=u'cmd', subtype=u'init_url', room=room)
                         browser.q_in.put(package)
                         # 初始化heart进程
-                        package = make_package(type=u'cmd', subtype=u'init_heart', room=room)
-                        browser.q_in.put(package)
+                        #package = make_package(type=u'cmd', subtype=u'init_heart', room=room)
+                        #browser.q_in.put(package)
                         # 将浏览器添加到列表
                         browser_thread_list.append({u'room': msg[u'room'], u'handle': browser})
                     elif subtype == u'find':
