@@ -14,6 +14,7 @@ INTEGRAL_GOOD_URL_FILE_PATH = os_documents_path + u'robot_data/xiaoyezi/integral
 INTEGRAL_RECORD_FOLD = os_documents_path + u'robot_data/xiaoyezi/integral_record/'
 FONT_PATH = os_documents_path + u'wechat_robot/STXINWEI.TTF'
 WECHAT_QR_PATH = os_documents_path + u'/QR.png'
+LOTTERY_FOLD = os_documents_path + u'robot_data/xiaoyezi/lottery_activity/'
 
 COMMAND_LIST = [u'看活动', u'查积分', u'签到', u'帮助', u'积分玩法', u'积分商品', u'兑换流程']
 SEND_DELAY = 3  # 发送等待
@@ -37,6 +38,7 @@ SEARCH_CLEAN_TIME_INTERVAL = 60*30  # 30分钟，超过时间间隔的搜索记�
 LOG_CLEAN_TIME_INTERVAL = 60*60*24  # 1天，超过时间间隔的LOG会被清楚
 CLEAN_THREAD_INTERVAL = 60*10  # 10分钟，CLEAN Thread 每隔一段唤醒一次
 GIT_UPLOAD_INTERVAL = 60*60*2  # 2小时，GIT同步的频率
+LOTTERY_TIME = 'wednesday 20:30 21:00'  # 抽奖日期,开始时间,结束时间
 
 label_ddlr = u"会员名 订单编号 订单价格 佣金比例".split()
 label_jfdh = u"会员名 商品编号 商品价格 佣金比例 订单编号".split()

@@ -11,7 +11,7 @@ JFSP_EXCEL = JFSP_PATH + u'积分商品.xlsx'
 label_no_yhj = [u'商品名称', u'淘宝客短链接(300天内有效)', u'淘口令(30天内有效)', u'活动结束时间',
                 u'商品价格(单位：元)', u'活动收入比率(%)']
 lalel_yhj = [u'商品名称', u'优惠券短链接(300天内有效)', u'优惠券淘口令(30天内有效)', u'活动结束时间',
-             u'商品价格(单位：元)', u'活动收入比率(%)']
+             u'商品价格(单位：元)', u'活动e收入比率(%)']
 
 def download_pic(url, file_name):
     url = url + DOWNLOAD_IMG_SIZE

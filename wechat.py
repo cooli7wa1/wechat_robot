@@ -2,6 +2,7 @@
 import json
 import random
 import traceback
+import schedule
 
 import itchat,shelve,re,codecs,threading,inspect,ctypes,wx,sys
 import pymongo
@@ -608,6 +609,68 @@ class MemberRecord:
             MemberRecord.member_record_mutex.release()
             logging.debug('==== 结束')
 
+class LotteryActivity:
+    is_start = False
+    def __init__(self):
+        l = LOTTERY_TIME.split(' ')
+        self.weekday = l[0]
+        self.time_s = l[1]
+        self.time_e = l[2]
+
+    def sendRemNotice(self):
+        '''timing send notice to group
+        '''
+        print('lottery activity will begin at %s' % self.time_s)
+
+    def sendBeginNotice(self):
+        '''when begin, send notice every 5 minutes
+        '''
+        while True:
+            if time.strftime('%H', time.time()) == self.time_e.split(':')[0]:
+                break
+            print('activity begin, please take part in')
+            time.sleep(5*60)
+
+    def beginActivity(self):
+        LotteryActivity.is_start = True
+        self.sendBeginNotice()
+
+    def endActivity(self):
+        LotteryActivity.is_start = False
+        self.calResult()
+
+    def calResult(self):
+        '''we should check user_numbers, and choose one as a lucky guy
+        '''
+        # check user_numbers
+        # reduct points
+        # choose lucky guy
+        # record lucky person
+        # send result to group
+        pass
+
+    def recordPerson(self):
+        '''record who has sign up
+        '''
+        pass
+
+    def scheduleThread(self):
+        schedule.every().eval(self.weekday).at(self.time_s).do(self.beginActivity)
+        schedule.every().eval(self.weekday).at(self.time_e).do(self.endActivity)
+        schedule.every().eval(self.weekday).at('8:00').do(self.sendRemNotice)
+        schedule.every().eval(self.weekday).at('12:00').do(self.sendRemNotice)
+        schedule.every().eval(self.weekday).at('20:00').do(self.sendRemNotice)
+        while True:
+            schedule.run_pending()
+            time.sleep(5)
+
+    def createSchedule(self):
+        thread = threading.Thread(target=self.scheduleThread)
+        thread.setDaemon(True)
+        thread.start()
+        thread.name = u'Lottery thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
+        logging.debug('==== thread name is ' + thread.name.encode('utf-8'))
+
 def user_check_in(user_name, nick_name):
     try:
         logging.debug('==== 开始')
@@ -1085,18 +1148,6 @@ def SendGoodsToUser(room_name, user_name, nick_name):
     for pic in pictures:
         os.remove(pic)
     os.remove(out_long_pic_path)
-
-# def be_add_friend(msg):
-#
-#
-# @itchat.msg_register(itchat.content.FRIENDS)
-# def ItchatMessageFriend(msg):
-#     p = threading.Thread(target=be_add_friend, args=(msg,))
-#     p.name = 'ItchatMessageFriend ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
-#     p.setDaemon(True)
-#     p.start()
-#     logging.debug('==== thread name is ' + p.name + ' nick name is ' + msg['RecommendInfo']['NickName'])
-#     return
 
 @itchat.msg_register(itchat.content.NOTE, isGroupChat=True)
 def ItchatMessageNoteGroup(msg):
@@ -1662,8 +1713,8 @@ def create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianme
 
 def wechat_main(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     logging.info('wechat_main: 进程开始')
-    itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=False)
-    # itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=True)
+    # itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=False)
+    itchat.auto_login(picDir=WECHAT_QR_PATH, hotReload=True)
     logging.info('wechat_main: 创建init进程开始')
     create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat)
     itchat.run()
