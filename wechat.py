@@ -7,6 +7,8 @@ import schedule
 import itchat,shelve,re,codecs,threading,inspect,ctypes,wx,sys
 import pymongo
 import wx.grid
+
+import xlrd
 from PIL import Image, ImageDraw, ImageFont
 from bson import ObjectId
 import Queue
@@ -573,6 +575,60 @@ class IntegralRecord:
         finally:
             IntegralRecord.integral_record_mutex.release()
             logging.debug('==== 结束')
+
+class IntegralGoods:
+    def inputInteral(self, inner_id, number, price, prop):
+        logging.debug('==== 开始')
+        if not (inner_id and number and price and prop):
+            logging.error("==== 输入数据有误")
+            return -1
+        ret = IntegralRecord().IntegralRecordCheckOrder(number)
+        if ret < 0:
+            return -1
+        logging.debug('==== 订单录入，会员：%s，订单编号：%s，价格：%s， 佣金比例：%s' % (inner_id, number, price, prop))
+        if eval(prop) > INTEGRAL_REWARD_MAX_PROP:
+            prop = str(INTEGRAL_REWARD_MAX_PROP)
+        c_points = int(round(eval(price)*INTEGRAL_PROP*(eval(prop)/100.0)))
+        ret = Database().DatabaseChangePoints(inner_id, c_points)
+        if ret == 0:
+            cur_points = Database().DatabaseViewPoints(inner_id)
+            IntegralRecord().IntegralRecordAddRecord(inner_id, number, price, prop, c_points, str(cur_points))
+            IntegralRecord().IntegralRecordOrderRecord(inner_id, number)
+            info = Database().DatebaseGetInfoByInnerId(inner_id)
+            nick_name = info[u'NickName']
+            zhifubao_mark = AccountMark(info[u'AliInfo'][u'ZhiFuBaoZH'])
+            SendMessageToRoom(TARGET_ROOM,
+                              '@msg@%s' % ('@%s 亲，您的订单【%s】积分已录入\n'
+                                           '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, number, zhifubao_mark, repr(cur_points))))
+        logging.debug('==== 结束')
+        return 0
+
+    def exchangeGoods(self, inner_id, jp_num, price, prop, number):
+        logging.debug('==== 开始')
+        if not (inner_id and jp_num and price and number and prop):
+            logging.error('==== 输入数据有误')
+            return -1
+        ret = IntegralRecord().IntegralRecordCheckOrder(number)
+        if ret < 0:
+            return -1
+        logging.debug('==== 积分兑换，会员：%s，积分商品：%s，价格：%s， 佣金比例：%s，订单编号：%s' %
+                      (inner_id, jp_num, price, prop, number))
+
+        integral = int(round(float(price) * (1 - (eval(prop)-5)/100.0) * INTEGRAL_GOOD_PROP))
+        c_points = 0 - integral
+        ret = Database().DatabaseChangePoints(inner_id, c_points)
+        if ret == 0:
+            cur_points = Database().DatabaseViewPoints(inner_id)
+            IntegralRecord().IntegralRecordAddRecord(inner_id, jp_num, price, prop, str(c_points), str(cur_points))
+            IntegralRecord().IntegralRecordOrderRecord(inner_id, number, jp_num)
+            info = Database().DatebaseGetInfoByInnerId(inner_id)
+            nick_name = info[u'NickName']
+            zhifubao_mark = AccountMark(info[u'AliInfo'][u'ZhiFuBaoZH'])
+            SendMessageToRoom(TARGET_ROOM,
+                              '@msg@%s' % ('@%s 亲，您已成功兑换积分商品【%s】\n'
+                                           '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, jp_num, zhifubao_mark, repr(cur_points))))
+        logging.debug('==== 结束')
+        return 0
 
 class MemberRecord:
     member_record_mutex = threading.Lock()  # 邀请记录的同步锁
@@ -1233,191 +1289,115 @@ class MyFrame(wx.Frame):
         panel = wx.Panel(self)
         mbox = wx.BoxSizer(wx.HORIZONTAL)
         self.panel_l = wx.Panel(panel)
-        # self.panel_r = wx.Panel(panel)
         self.panel_l.SetBackgroundColour('White')
-        # self.panel_r.SetBackgroundColour('Blue')
         mbox.Add(self.panel_l, 0, flag=wx.ALL, border=10)
-        # mbox.Add(self.panel_r, 0, flag=wx.ALL, border=10)
 
-        # panel_l
-        # col_labels = Database().DatabaseGetLabels()[1]
         box_l_1 = self.MakeStaticBoxSizer(self.panel_l, u"订单录入", label_ddlr)
         box_l_2 = self.MakeStaticBoxSizer(self.panel_l, u"积分兑换", label_jfdh)
-        # box_l_3 = self.MakeStaticBoxSizer(self.panel_l, u"会员明细", col_labels, special=True)
         box_1_5 = self.MakeStaticBoxSizer(self.panel_l, u"奖励积分", label_jljf)
-        button1 = wx.Button(self.panel_l, -1, u'确认', size=(80,30))
-        self.panel_l.Bind(wx.EVT_BUTTON, self.OnButton1Click, button1)
-        button2 = wx.Button(self.panel_l, -1, u'确认', size=(80, 30))
-        self.panel_l.Bind(wx.EVT_BUTTON, self.OnButton2Click, button2)
-        button3 = wx.Button(self.panel_l, -1, u'备份数据', size=(80, 30))
-        self.panel_l.Bind(wx.EVT_BUTTON, self.OnButton3Click, button3)
-        # button5 = wx.Button(self.panel_l, -1, u'确定修改', size=(80, 30))
-        # self.panel_l.Bind(wx.EVT_BUTTON, self.OnButton5Click, button5)
-        # button6 = wx.Button(self.panel_l, -1, u'删除用户', size=(80, 30))
-        # self.panel_l.Bind(wx.EVT_BUTTON, self.OnButton6Click, button6)
-        button7 = wx.Button(self.panel_l, -1, u'确认', size=(80, 30))
-        self.panel_l.Bind(wx.EVT_BUTTON, self.OnButton7Click, button7)
+        button_normal_lr = wx.Button(self.panel_l, -1, u'普通录入', size=(100,30))
+        self.panel_l.Bind(wx.EVT_BUTTON, self.OnNLRClick, button_normal_lr)
+        button_search_lr = wx.Button(self.panel_l, -1, u'查找录入', size=(100,30))
+        self.panel_l.Bind(wx.EVT_BUTTON, self.OnSLRClick, button_search_lr)
+        button_dh = wx.Button(self.panel_l, -1, u'确认', size=(80, 30))
+        self.panel_l.Bind(wx.EVT_BUTTON, self.OnDHClick, button_dh)
+        button_bak = wx.Button(self.panel_l, -1, u'备份数据', size=(80, 30))
+        self.panel_l.Bind(wx.EVT_BUTTON, self.OnBAKClick, button_bak)
+        button_jl = wx.Button(self.panel_l, -1, u'确认', size=(80, 30))
+        self.panel_l.Bind(wx.EVT_BUTTON, self.OnJLClick, button_jl)
+
+        box_l_1_1 = wx.BoxSizer(wx.HORIZONTAL)
+        box_l_1_1.Add(button_normal_lr, 0, wx.ALL | wx.ALIGN_RIGHT, 5)
+        box_l_1_1.Add(button_search_lr, 0, wx.ALL | wx.ALIGN_RIGHT, 5)
 
         box_l_4 = wx.BoxSizer(wx.HORIZONTAL)
-        # box_l_4.Add(button6, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.ALIGN_LEFT, 5)
-        # box_l_4.Add(button5, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.ALIGN_RIGHT, 5)
 
         box_l = wx.BoxSizer(wx.VERTICAL)
-        box_l.Add(button3, 0, wx.ALL | wx.ALIGN_RIGHT, 5)
+        box_l.Add(button_bak, 0, wx.ALL | wx.ALIGN_RIGHT, 5)
         box_l.Add(box_l_1, 0, wx.ALL, 5)
-        box_l.Add(button1, 0, wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.ALIGN_RIGHT, 5)
+        box_l.Add(box_l_1_1, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.ALIGN_RIGHT, 5)
         box_l.Add((-1,5))
         box_l.Add(box_l_2, 0, wx.ALL, 5)
-        box_l.Add(button2, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.ALIGN_RIGHT, 5)
-        # box_l.Add(box_l_3, 0, wx.ALL, 5)
+        box_l.Add(button_dh, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.ALIGN_RIGHT, 5)
         box_l.Add(box_l_4, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.ALIGN_RIGHT, 5)
         box_l.Add(box_1_5, 0, wx.ALL, 5)
-        box_l.Add(button7, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.ALIGN_RIGHT, 5)
+        box_l.Add(button_jl, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.ALIGN_RIGHT, 5)
 
         self.panel_l.SetSizer(box_l)
-
-        # panel_r
-        # box_r = wx.BoxSizer(wx.VERTICAL)
-        # self.grid = wx.grid.Grid(self.panel_r)
-        # self.table = MyTable()
-        # self.grid.SetTable(self.table,True)
-        # self.grid.AutoSize()
-        # button4 = wx.Button(self.panel_r, -1, u'更新', size=(80, 30))
-        # self.panel_r.Bind(wx.EVT_BUTTON, self.OnButton4Click, button4)
-        # box_r.Add(button4, 0, wx.ALL | wx.ALIGN_RIGHT, 5)
-        # box_r.Add(self.grid, 0, wx.ALL, 5)
-        # self.panel_r.SetSizer(box_r)
-        # box_r.Fit(self.panel_r)
 
         panel.SetSizer(mbox)
         mbox.Fit(self)
 
-    def OnButton1Click(self, event):
+    def OnNLRClick(self, event):
         logging.debug('==== 开始')
-        inner_id = self.ddlr_objs[u'会员名'].GetValue()
-        number = self.ddlr_objs[u'订单编号'].GetValue()
-        price = self.ddlr_objs[u'订单价格'].GetValue()
-        prop = self.ddlr_objs[u'佣金比例'].GetValue()
-        ret = IntegralRecord().IntegralRecordCheckOrder(number)
+        inner_id = self.ddlr_objs[u'会员名'].GetValue().strip()
+        number = self.ddlr_objs[u'订单编号'].GetValue().strip()
+        price = self.ddlr_objs[u'订单价格'].GetValue().strip()
+        prop = self.ddlr_objs[u'佣金比例'].GetValue().strip()
+        ret = IntegralGoods().inputInteral(inner_id, number, price, prop)
         if ret < 0:
             return
-        logging.debug('==== 订单录入，会员：%s，订单编号：%s，价格：%s， 佣金比例：%s' % (inner_id, number, price, prop))
-        if not (inner_id and number and price and prop):
-            logging.error("==== 输入数据有误")
-            return
-        if eval(prop) > INTEGRAL_REWARD_MAX_PROP:
-            prop = str(INTEGRAL_REWARD_MAX_PROP)
-        c_points = int(round(eval(price)*INTEGRAL_PROP*(eval(prop)/100.0)))
-        ret = Database().DatabaseChangePoints(inner_id, c_points)
-        if ret == 0:
-            cur_points = Database().DatabaseViewPoints(inner_id)
-            IntegralRecord().IntegralRecordAddRecord(inner_id, number, price, prop, c_points, str(cur_points))
-            IntegralRecord().IntegralRecordOrderRecord(inner_id, number)
-            info = Database().DatebaseGetInfoByInnerId(inner_id)
-            nick_name = info[u'NickName']
-            zhifubao_mark = AccountMark(info[u'AliInfo'][u'ZhiFuBaoZH'])
-            SendMessageToRoom(TARGET_ROOM,
-                              '@msg@%s' % ('@%s 亲，您的订单【%s】积分已录入\n'
-                                           '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, number, zhifubao_mark, repr(cur_points))))
-            # self.table = MyTable()
-            # self.grid.SetTable(self.table, True)
-            # self.grid.AutoSize()
-            # self.grid.ForceRefresh()
         logging.debug('==== 结束')
 
-    def OnButton2Click(self, event):
+    def OnSLRClick(self, event):
         logging.debug('==== 开始')
-        inner_id = self.jfdh_objs[u'会员名'].GetValue()
-        jp_num = self.jfdh_objs[u'商品编号'].GetValue()
-        price = self.jfdh_objs[u'商品价格'].GetValue()
+        inner_id = self.ddlr_objs[u'会员名'].GetValue().strip()
+        number = self.ddlr_objs[u'订单编号'].GetValue().strip()
+        files = os.listdir(INTEGRAL_INPUT_FOLD)
+        for f in files:
+            if re.match('TaokeDetail-.*\.xls', f):
+                file = os.path.join(INTEGRAL_INPUT_FOLD, f)
+                break
+        else:
+            print(u'没有找到报表文件')
+            return
+        wb = xlrd.open_workbook(file)
+        ws = wb.sheets()[0]
+        title = ws.row_values(0)
+        for i in range(1, ws.nrows):
+            if number in ws.row_values(i):
+                info = dict(zip(title, ws.row_values(i)))
+                name, status, price, prop = [str(info[i]) for i in (u'商品信息', u'订单状态', u'结算金额', u'佣金比率')]
+                if status != u'订单结算':
+                    print(u'订单未结算, 当前状态为%s' % status)
+                    return
+                break
+        else:
+            print(u'没有找到订单, %s' % number)
+            return
+        self.ddlr_objs[u'订单价格'].SetValue(price)
+        self.ddlr_objs[u'佣金比例'].SetValue(prop)
+        self.ddlr_objs[u'商品名称'].SetValue(name)
+        prop = prop.split(' ')[0]
+        ret = IntegralGoods().inputInteral(inner_id, number, price, prop)
+        if ret < 0:
+            return
+        logging.debug('==== 结束')
+
+
+    def OnDHClick(self, event):
+        logging.debug('==== 开始')
+        inner_id = self.jfdh_objs[u'会员名'].GetValue().strip()
+        jp_num = self.jfdh_objs[u'商品编号'].GetValue().strip()
+        price = self.jfdh_objs[u'商品价格'].GetValue().strip()
         #TODO 应该从积分商品列表中获取当前商品的佣金比例，如果未找到此商品则返回错
-        prop = self.jfdh_objs[u'佣金比例'].GetValue()
-        number = self.jfdh_objs[u'订单编号'].GetValue()
-        ret = IntegralRecord().IntegralRecordCheckOrder(number)
+        prop = self.jfdh_objs[u'佣金比例'].GetValue().strip()
+        number = self.jfdh_objs[u'订单编号'].GetValue().strip()
+        ret = IntegralGoods().exchangeGoods(inner_id, jp_num, price, prop, number)
         if ret < 0:
             return
-        logging.debug('==== 积分兑换，会员：%s，积分商品：%s，价格：%s， 佣金比例：%s，订单编号：%s' %
-                      (inner_id, jp_num, price, prop, number))
-        if not (inner_id and jp_num and price and number and prop):
-            logging.error('==== 输入数据有误')
-            return
-
-        integral = int(round(float(price) * (1 - (eval(prop)-5)/100.0) * INTEGRAL_GOOD_PROP))
-        c_points = 0 - integral
-        ret = Database().DatabaseChangePoints(inner_id, c_points)
-        if ret == 0:
-            cur_points = Database().DatabaseViewPoints(inner_id)
-            IntegralRecord().IntegralRecordAddRecord(inner_id, jp_num, price, prop, str(c_points), str(cur_points))
-            IntegralRecord().IntegralRecordOrderRecord(inner_id, number, jp_num)
-            info = Database().DatebaseGetInfoByInnerId(inner_id)
-            nick_name = info[u'NickName']
-            zhifubao_mark = AccountMark(info[u'AliInfo'][u'ZhiFuBaoZH'])
-            SendMessageToRoom(TARGET_ROOM,
-                              '@msg@%s' % ('@%s 亲，您已成功兑换积分商品【%s】\n'
-                              '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, jp_num, zhifubao_mark, repr(cur_points))))
-            # self.table = MyTable()
-            # self.grid.SetTable(self.table, True)
-            # self.grid.AutoSize()
-            # self.grid.ForceRefresh()
         logging.debug('==== 结束')
 
-    def OnButton3Click(self, event):
+    def OnBAKClick(self, event):
         logging.debug('==== 开始')
         logging.debug('==== 备份数据')
         UpdateToGit(is_data=True, is_robot=False)
         logging.debug('==== 结束')
 
-    # def OnButton4Click(self, event):
-    #     logging.debug(u'==== 开始')
-    #     self.table = MyTable()
-    #     self.grid.SetTable(self.table, True)
-    #     self.grid.AutoSize()
-    #     self.grid.ForceRefresh()
-    #     logging.debug(u'==== 结束')
-    #
-    # def OnButton5Click(self, event):
-    #     logging.debug(u'==== 开始')
-    #     remark_name = self.user_search_obj[u'会员名'].GetValue().encode('utf-8')
-    #     logging.debug(u'==== 更改会员信息，会员：%s' % remark_name)
-    #     ilabels = self.user_objs.keys()
-    #     user_data = {}
-    #     for a in ilabels:
-    #         tmp = self.user_objs[a].GetValue()
-    #         if a == 'nick_name':
-    #             user_data[a] = tmp
-    #         elif a in ('grade', 'points'):
-    #             user_data[a] = int(tmp)
-    #         else:
-    #             user_data[a] = tmp.encode('utf-8')
-    #     Database().DatabaseWriteData(remark_name, user_data)
-    #     self.table = MyTable()
-    #     self.grid.SetTable(self.table, True)
-    #     self.grid.AutoSize()
-    #     self.grid.ForceRefresh()
-    #     logging.debug(u'==== 结束')
-
-    # def OnButton6Click(self, event):
-    #     logging.debug(u'==== 开始')
-    #     remark = self.user_search_obj[u'会员名'].GetValue().encode('utf-8')
-    #     msg_dialog = wx.MessageDialog(self, u'确定删除用户【' + remark + u'】?', u'删除用户')
-    #     ret = msg_dialog.ShowModal()
-    #     msg_dialog.Destroy()
-    #     if ret == wx.ID_OK:
-    #         ret = Database().DatabaseDelUser(remark)
-    #         if ret == 0:
-    #             logging.info(u'==== 用户删除成功')
-    #         else:
-    #             logging.info(u'==== 删除用户失败')
-    #         self.table = MyTable()
-    #         self.grid.SetTable(self.table, True)
-    #         self.grid.AutoSize()
-    #         self.grid.ForceRefresh()
-    #     logging.debug(u'==== 结束')
-
-    def OnButton7Click(self, event):
+    def OnJLClick(self, event):
         logging.debug('==== 开始')
-        inner_id = self.jljf_objs[u'会员名'].GetValue().encode('utf-8')
-        integral = self.jljf_objs[u'奖励积分'].GetValue()
+        inner_id = self.jljf_objs[u'会员名'].GetValue().encode('utf-8').strip()
+        integral = self.jljf_objs[u'奖励积分'].GetValue().strip()
         logging.debug('==== 会员：%s，奖励积分：%s' % (inner_id, integral))
         if not (inner_id and integral):
             logging.error("==== 输入数据有误")
@@ -1432,54 +1412,34 @@ class MyFrame(wx.Frame):
             SendMessageToRoom(TARGET_ROOM,
                               '@msg@%s' % ('@%s 亲，活动奖励积分【%s】已录入\n'
                               '您的支付宝账号(%s)的当前积分为：%s' % (nick_name, integral, zhifubao_mark, repr(cur_points))))
-            # self.table = MyTable()
-            # self.grid.SetTable(self.table, True)
-            # self.grid.AutoSize()
-            # self.grid.ForceRefresh()
         logging.debug('==== 结束')
 
-    # def EnterText(self, event):
-    #     logging.debug(u'==== 开始')
-    #     remark_name = self.user_search_obj[u'会员名'].GetValue().encode('utf-8')
-    #     user_data = Database().DatabaseViewData(remark_name)
-    #     ilabels = self.user_objs.keys()
-    #     if user_data:
-    #         for a in ilabels:
-    #             self.user_objs[a].SetValue(str(user_data[a]).decode('utf-8'))
-    #     else:
-    #         logging.info(u'==== 数据库中没有此用户信息， 输入的会员名不正确')
-    #         for a in ilabels:
-    #             self.user_objs[a].SetValue('')
-    #     logging.debug(u'==== 结束')
-
-    def MakeStaticBoxSizer(self, parent, boxlabel, labels, special=False):
+    def MakeStaticBoxSizer(self, parent, boxlabel, labels):
         box = wx.StaticBox(parent, -1, boxlabel)
-        sizer = wx.StaticBoxSizer(box, wx.HORIZONTAL)
-        sizer1 = wx.BoxSizer(wx.VERTICAL)
-        sizer2 = wx.BoxSizer(wx.VERTICAL)
-        if special:
-            bw1 = StaticWindow(parent, label=u'会员名')
-            sizer2.Add(bw1, 0, wx.ALL, 2)
-            bw = wx.TextCtrl(parent, -1, '', wx.DefaultPosition, (200,25), style=wx.TE_PROCESS_ENTER)
-            bw.Bind(wx.EVT_TEXT_ENTER, self.EnterText, bw)
-            self.user_search_obj[u'会员名'] = bw
-            sizer1.Add(bw, 0, wx.ALL, 2)
+        sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
+        sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+        sizer2_1 = wx.BoxSizer(wx.VERTICAL)
+        sizer2_2 = wx.BoxSizer(wx.VERTICAL)
         for a in labels:
             bw1 = StaticWindow(parent, label=a)
-            sizer2.Add(bw1, 0, wx.ALL, 2)
+            sizer2_2.Add(bw1, 0, wx.ALL, 2)
             bw = TextWindow(parent)
             if labels == label_ddlr:
                 self.ddlr_objs[a] = bw
             elif labels == label_jfdh:
                 self.jfdh_objs[a] = bw
-            elif special:
-                self.user_objs[a] = bw
             elif labels == label_jljf:
                 self.jljf_objs[a] = bw
-            sizer1.Add(bw, 0, wx.ALL, 2)
-
+            sizer2_1.Add(bw, 0, wx.ALL, 2)
+        if labels == label_ddlr:
+            bw2 = wx.TextCtrl(parent, -1, u'商品名称', size=(400,50), style=wx.TE_MULTILINE)
+            self.ddlr_objs[u'商品名称'] = bw2
+            sizer1 = wx.BoxSizer(wx.HORIZONTAL)
+            sizer1.Add(bw2, 0, wx.ALL, 10)
+            sizer.Add(sizer1, 0, wx.ALL, 10)
+        sizer2.Add(sizer2_2, 0, wx.ALL, 10)
+        sizer2.Add(sizer2_1, 0, wx.ALL, 10)
         sizer.Add(sizer2, 0, wx.ALL, 10)
-        sizer.Add(sizer1, 0, wx.ALL, 10)
         return sizer
 
 def UiMainThread():
