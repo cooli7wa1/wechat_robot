@@ -1699,10 +1699,10 @@ def init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wech
     for room in MONITOR_ROOM_LIST:
         monitor_room_user_name.append(GetRoomUserNameByNickName(room))
     logging.info('init_thread: 创建接收lianmeng进程命令的线程')
-    communicate_with_lianmeng.q_out = q_wechat_lianmeng
-    communicate_with_lianmeng.q_in = q_lianmeng_wechat
-    communicate_with_lianmeng().create_receive_from_lianmeng_thread()
-    communicate_with_lianmeng().browser_init()
+    #communicate_with_lianmeng.q_out = q_wechat_lianmeng
+    #communicate_with_lianmeng.q_in = q_lianmeng_wechat
+    #communicate_with_lianmeng().create_receive_from_lianmeng_thread()
+    #communicate_with_lianmeng().browser_init()
 
 def create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     thread = threading.Thread(target=init_thread, args=(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat))
