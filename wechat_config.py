@@ -24,7 +24,7 @@ INTEGRAL_PROP = 10  # 积分 = 商品价格*INTEGRAL_PROP*佣金比例(佣金比
 INTEGRAL_GOOD_PROP = 100  # 积分商品所需积分 = 商品实际价格*INTEGRAL_GOOD_PROP*（1-佣金比例）
 INTEGRAL_REWARD_MAX_PROP = 20  #奖励积分的最大比例，大于最大比例，按照最大比例计算
 INNER_ROOM_NICK_NAME = u'乐淘家，内部信息群'
-ROOM_NICK_NAME = u'\U0001f49d【乐淘家】淘天猫内部优惠精选\U0001f49d'
+ROOM_NICK_NAME = u'\U0001f49d【乐淘家】淘天猫优惠精选\U0001f49d'
 MONITOR_ROOM_LIST = [INNER_ROOM_NICK_NAME, ROOM_NICK_NAME]  # 监控的群的nick_name
 monitor_room_user_name = []  # 监控的群的user_name
 GOODS_PER_TIME = 2  # 找商品时每次发送的商品数量
