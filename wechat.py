@@ -667,55 +667,146 @@ class MemberRecord:
 
 class LotteryActivity:
     is_start = False
+    join_lock = threading.Lock()
+    user_num = 0
+    file_name = '0.txt'
     def __init__(self):
         l = LOTTERY_TIME.split(' ')
-        self.weekday = l[0]
-        self.time_s = l[1]
-        self.time_e = l[2]
+        self.time_s = l[0]
+        self.time_e = l[1]
 
     def sendRemNotice(self):
         '''timing send notice to group
         '''
-        print('lottery activity will begin at %s' % self.time_s)
+        SendMessageToRoom(TARGET_ROOM, u'抽奖活动将于今天【%s】开始哦' % self.time_s)
 
     def sendBeginNotice(self):
         '''when begin, send notice every 5 minutes
         '''
+        logging.debug('==== 开始')
         while True:
-            if time.strftime('%H', time.time()) == self.time_e.split(':')[0]:
+            cur_time = time.strftime('%H:%M', time.localtime())
+            h, m= [int(i) for i in cur_time.split(':')]
+            h_e, m_e = [int(i) for i in self.time_e.split(':')]
+            if h*60+m >= h_e*60+m_e:
                 break
-            print('activity begin, please take part in')
+            if LotteryActivity.is_start == False:
+                break
+            SendMessageToRoom(TARGET_ROOM, u'[啤酒]抽奖活动开始喽\n'
+                                           u'[啤酒]输入【抽奖】报名参加\n'
+                                           u'[咖啡]奖励%d积分\n'
+                                           u'[咖啡]门票%d积分\n'
+                                           u'[咖啡]报名人数限制【%d】\n'
+                                           u'[咖啡]报名截止时间【%s】'
+                              % (LOTTERY_REWARD_POINTS, LOTTERY_POINTS, LOTTERY_MAX_NUM, self.time_e))
             time.sleep(5*60)
+        logging.debug('==== 结束')
 
     def beginActivity(self):
+        logging.debug('==== 开始')
+        LotteryActivity.user_num = 0
+        files = os.listdir(LOTTERY_FOLD)
+        l = []
+        for f in files:
+            if re.match('\d+\.txt', f):
+                l.append(int(f.split('.')[0]))
+        if not l:
+            LotteryActivity.file_name = '0.txt'
+        else:
+            LotteryActivity.file_name = str(sorted(l)[len(l)-1] + 1) + '.txt'
         LotteryActivity.is_start = True
-        self.sendBeginNotice()
+        thread = threading.Thread(target=self.sendBeginNotice)
+        thread.setDaemon(True)
+        thread.start()
+        thread.name = u'sendBeginNotice thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
+        logging.debug('==== 结束')
 
     def endActivity(self):
+        logging.debug('==== 开始')
+        if LotteryActivity.is_start == False:
+            return
         LotteryActivity.is_start = False
-        self.calResult()
+        try:
+            if LotteryActivity.user_num >= LOTTERY_MAX_NUM:
+                msg = u'抽奖报名人数已满，开始计算抽奖结果'
+                SendMessageToRoom(TARGET_ROOM, msg)
+            else:
+                msg = u'抽奖报名人数不足【%d】人，无法开奖，活动结束' % LOTTERY_MAX_NUM
+                SendMessageToRoom(TARGET_ROOM, msg)
+                return
+            self.calResult()
+        finally:
+            LotteryActivity.user_num = 0
+            logging.debug('==== 结束')
 
     def calResult(self):
-        '''we should check user_numbers, and choose one as a lucky guy
+        '''we should check user_numbers, and choose one as a lucky boy
         '''
-        # check user_numbers
-        # reduct points
-        # choose lucky guy
-        # record lucky person
+        logging.debug('==== 开始')
+        # get users, choose lucy boy
+        users = []
+        luck_boy = u''
+        with codecs.open(LOTTERY_FOLD+LotteryActivity.file_name, 'r+', 'utf-8') as f:
+            line = f.readline()
+            users = line.strip().split(' ')
+            luck_boy = random.choice(users)
+            f.write('\n'+luck_boy)
+        # deduce points
+        for user in users:
+            points = 0 - LOTTERY_POINTS
+            Database().DatabaseChangePoints(user, points)
+        # add points to lucky boy
+        points = LOTTERY_REWARD_POINTS
+        Database().DatabaseChangePoints(luck_boy, points)
         # send result to group
-        pass
+        nick_name = Database().DatebaseGetInfoByInnerId(luck_boy)[u'NickName']
+        SendMessageToRoom(TARGET_ROOM, u'恭喜【%s】获得奖励积分【%d】' % (nick_name, LOTTERY_REWARD_POINTS))
+        logging.debug('==== 结束')
 
-    def recordPerson(self):
-        '''record who has sign up
+    def join(self, user_name, to_name, nick_name):
+        '''someone join into the activity
         '''
-        pass
+        LotteryActivity.join_lock.acquire()
+        try:
+            logging.debug('==== 开始')
+            # multhread, so we should check if activity is end
+            if LotteryActivity.is_start == False:
+                SendMessage('@msg@%s' % (u'@%s, 活动刚刚结束了， 下次再参加吧' % nick_name), to_name)
+                return
+            # check current user number
+            if LotteryActivity.user_num >= LOTTERY_MAX_NUM:
+                SendMessage('@msg@%s' % (u'@%s, 当前报名人数已满, 下次再参加吧' % nick_name), to_name)
+                return
+            # check user points
+            points = user_view_points(user_name, nick_name)
+            if points < 0:
+                if points == WECHAT_NOT_FIND:
+                    SendMessage('@msg@%s' % ('@%s 亲，数据库中未找到昵称\n可能您是新用户或者更改了昵称\n请私聊联系小叶子处理') % nick_name, to_name)
+                elif points == WECHAT_NO_ZHIFUBAOZH:
+                    SendMessage('@msg@%s' % ('@%s 您还未设置支付宝\n请私聊联系小叶子处理' % nick_name), to_name)
+                else:
+                    SendMessage('@msg@%s' % ('@%s O，NO，发生了一些错误，稍后再试吧' % nick_name), to_name)
+                return
+            elif points < LOTTERY_POINTS:
+                SendMessage('@msg@%s' % (u'@%s, 您的积分不足,无法参加抽奖,所需积分【%d】' % (nick_name, LOTTERY_POINTS)), to_name)
+                return
+            # join in
+            with codecs.open(LOTTERY_FOLD+LotteryActivity.file_name, 'a', 'utf-8') as f:
+                inner_id = UserName_InnerId[user_name][u'InnerId']
+                f.write(inner_id + ' ')
+            LotteryActivity.user_num += 1
+            # send message to user
+            SendMessage('@msg@%s' % (u'@%s 抽奖报名成功, 当前参加人数【%d】' % (nick_name, LotteryActivity.user_num)), to_name)
+            if LotteryActivity.user_num >= LOTTERY_MAX_NUM:
+                self.endActivity()
+        finally:
+            logging.debug('==== 结束')
+            LotteryActivity.join_lock.release()
 
     def scheduleThread(self):
-        schedule.every().eval(self.weekday).at(self.time_s).do(self.beginActivity)
-        schedule.every().eval(self.weekday).at(self.time_e).do(self.endActivity)
-        schedule.every().eval(self.weekday).at('8:00').do(self.sendRemNotice)
-        schedule.every().eval(self.weekday).at('12:00').do(self.sendRemNotice)
-        schedule.every().eval(self.weekday).at('20:00').do(self.sendRemNotice)
+        # schedule.every(1).minutes.do(self.beginActivity)
+        schedule.every().day.at(self.time_s).do(self.beginActivity)
+        schedule.every().day.at(self.time_e).do(self.endActivity)
         while True:
             schedule.run_pending()
             time.sleep(5)
@@ -806,7 +897,7 @@ def AccountMark(name):
         name_mark = match.group(1) + u'xxxxx' + match.group(2)
     return name_mark
 
-def text_command_router(msg, nick_name):
+def normal_command_router(msg, nick_name):
     try:
         logging.debug('==== 开始')
         to_name = msg['FromUserName']
@@ -1044,6 +1135,33 @@ def master_command_router(msg):
         logging.error('Exception!!\nmsg: %s\ne: %s' % (msg, traceback.format_exc()))
         raise
 
+def special_command_router(msg, nick_name):
+    try:
+        logging.debug('==== 开始')
+        to_name = msg['FromUserName']
+        user_name = msg['ActualUserName']
+        text = msg['Text'].strip()
+        if text == u'抽奖':
+            if LotteryActivity.is_start:
+                LotteryActivity().join(user_name, to_name, nick_name)
+            else:
+                time_s, time_e = LOTTERY_TIME.split(' ')
+                cur_time = time.strftime('%H:%M', time.localtime())
+                h, m = [int(i) for i in cur_time.split(':')]
+                h_e, m_e = [int(i) for i in time_e.split(':')]
+                if h*60+m > h_e*60+m_e:
+                    SendMessage('@msg@%s' % (u'@%s 亲，抽奖活动已经结束，抽奖活动于每天【%s】开始'
+                                             % (nick_name, time_s)), to_name)
+                else:
+                    SendMessage('@msg@%s' % (u'@%s 亲，抽奖活动将于%s开始' % (nick_name, time_s)), to_name)
+
+        logging.debug('==== 结束')
+        return
+    except Exception, e:
+        log_and_send_error_msg('Exception occur', 'See log', repr(e))
+        logging.error('Exception!!\nmsg: %s\nnick_name: %s\ne: %s' % (msg, nick_name, traceback.format_exc()))
+        raise
+
 def group_text_reply(msg):
     try:
         logging.debug('==== 开始')
@@ -1054,22 +1172,25 @@ def group_text_reply(msg):
             return
         nick_name = member_info[u'DisplayName'] if member_info[u'DisplayName'] else member_info[u'NickName']
         text = msg[u'Text'].strip()
-        if text in COMMAND_LIST:
+        if text in NORMAL_COMMAND_LIST:
             logging.debug('==== 来自：%s，聊天内容：%s' % (nick_name, msg[u'Text']))
-            text_command_router(msg, nick_name)
-        elif re.match(u'找 .*', text):
-            key_word = text[2:].strip()
-            logging.debug('==== 来自：%s，收到查找商品命令: %s' % (nick_name, text))
-            package = make_package(room=msg[u'FromUserName'], user=msg[u'ActualUserName'], nick=nick_name,
-                                   content=key_word, type=u'cmd', subtype=u'find')
-            ret = communicate_with_lianmeng().send_msg_to_lianmeng(package)
-            if ret == QUEUE_FULL:
-                SendMessage('@msg@%s' % ('@%s 当前查找人数太多，请稍后再试' % nick_name), msg[u'FromUserName'])
-                return
-            SendMessage('@msg@%s' % ('@%s 正在为您查找商品【%s】，请稍等...' % (nick_name, key_word)), msg[u'FromUserName'])
-        elif text == u'下一页':
-            logging.debug('==== 收到命令，下一页')
-            communicate_with_lianmeng().send_goods_to_user({u'room': msg[u'FromUserName'], u'user': msg[u'ActualUserName'], u'nick': nick_name})
+            normal_command_router(msg, nick_name)
+        if text in SPECIAL_COMMAND_LIST:
+            logging.debug('==== 来自：%s，聊天内容：%s' % (nick_name, msg[u'Text']))
+            special_command_router(msg, nick_name)
+        # elif re.match(u'找 .*', text):
+        #     key_word = text[2:].strip()
+        #     logging.debug('==== 来自：%s，收到查找商品命令: %s' % (nick_name, text))
+        #     package = make_package(room=msg[u'FromUserName'], user=msg[u'ActualUserName'], nick=nick_name,
+        #                            content=key_word, type=u'cmd', subtype=u'find')
+        #     ret = communicate_with_lianmeng().send_msg_to_lianmeng(package)
+        #     if ret == QUEUE_FULL:
+        #         SendMessage('@msg@%s' % ('@%s 当前查找人数太多，请稍后再试' % nick_name), msg[u'FromUserName'])
+        #         return
+        #     SendMessage('@msg@%s' % ('@%s 正在为您查找商品【%s】，请稍等...' % (nick_name, key_word)), msg[u'FromUserName'])
+        # elif text == u'下一页':
+        #     logging.debug('==== 收到命令，下一页')
+        #     communicate_with_lianmeng().send_goods_to_user({u'room': msg[u'FromUserName'], u'user': msg[u'ActualUserName'], u'nick': nick_name})
         elif GetRoomUserNameByNickName(INNER_ROOM_NICK_NAME) == msg[u'FromUserName']:
             master_command_router(msg)
         logging.debug('==== 结束')
@@ -1663,6 +1784,8 @@ def init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wech
     #communicate_with_lianmeng.q_in = q_lianmeng_wechat
     #communicate_with_lianmeng().create_receive_from_lianmeng_thread()
     #communicate_with_lianmeng().browser_init()
+    logging.info('init_thread: 创建抽奖线程')
+    LotteryActivity().createSchedule()
 
 def create_init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat):
     thread = threading.Thread(target=init_thread, args=(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wechat))
