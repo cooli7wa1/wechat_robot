@@ -7,3 +7,4 @@ dist/
 *.pyc
 QR.png
 nohup.out
+itchat.pkl
