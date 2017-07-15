@@ -755,9 +755,15 @@ class LotteryActivity:
         for user in users:
             points = 0 - LOTTERY_POINTS
             Database().DatabaseChangePoints(user, points)
+            cur_points = Database().DatabaseViewPoints(user)
+            IntegralRecord().IntegralRecordAddRecord(user, u'抽奖扣除积分', 'None', 'None',
+                                                 str(points), str(cur_points))
         # add points to lucky boy
         points = LOTTERY_REWARD_POINTS
         Database().DatabaseChangePoints(luck_boy, points)
+        cur_points = Database().DatabaseViewPoints(luck_boy)
+        IntegralRecord().IntegralRecordAddRecord(luck_boy, u'抽奖奖励积分', 'None', 'None',
+                                                 str(points), str(cur_points))
         # send result to group
         nick_name = Database().DatebaseGetInfoByInnerId(luck_boy)[u'NickName']
         SendMessageToRoom(TARGET_ROOM, u'恭喜【%s】获得奖励积分【%d】' % (nick_name, LOTTERY_REWARD_POINTS))
@@ -1148,12 +1154,12 @@ def special_command_router(msg, nick_name):
                 time_s, time_e = LOTTERY_TIME.split(' ')
                 cur_time = time.strftime('%H:%M', time.localtime())
                 h, m = [int(i) for i in cur_time.split(':')]
-                h_e, m_e = [int(i) for i in time_e.split(':')]
-                if h*60+m > h_e*60+m_e:
+                h_s, m_s = [int(i) for i in time_s.split(':')]
+                if h*60+m < h_s*60+m_s:
+                    SendMessage('@msg@%s' % (u'@%s 亲，抽奖活动将于%s开始' % (nick_name, time_s)), to_name)
+                else:
                     SendMessage('@msg@%s' % (u'@%s 亲，抽奖活动已经结束，抽奖活动于每天【%s】开始'
                                              % (nick_name, time_s)), to_name)
-                else:
-                    SendMessage('@msg@%s' % (u'@%s 亲，抽奖活动将于%s开始' % (nick_name, time_s)), to_name)
 
         logging.debug('==== 结束')
         return
