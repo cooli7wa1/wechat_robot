@@ -23,8 +23,8 @@ fi
 echo -e "\033[34m ==> enter mongodb fold \033[0m"
 cd $MONGODB_BACKUP_PATH
 echo -e "\033[34m ==> mongorestore \033[0m"
-mongorestore -d lianmeng --drop
-mongorestore -d wechat --drop
+mongorestore --nsInclude 'lianmeng.*' --drop
+mongorestore --nsInclude 'wechat.*' --drop
 if [ $? -ne 0 ];then
 	echo -e "\033[31m something wrong \033[0m"
 	exit 1
