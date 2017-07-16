@@ -1586,7 +1586,8 @@ def UpdateToGit(is_robot=True, is_data=True):
     cnt = 0
     if is_data:
         os.chdir(MONGO_DB_DUMP_FOLD)
-        os.system('mongodump')
+        os.system('mongodump -d lianmeng')
+        os.system('mongodump -d wechat')
         os.chdir(GIT_DATA_FOLD)
     else:
         os.chdir(GIT_CODE_FOLD)

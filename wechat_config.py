@@ -15,7 +15,7 @@ ACTIVITY_FOLD = os_documents_path + u'robot_data/xiaoyezi/activity/'
 TEMPLATE_FOLD = os_documents_path + u'robot_data/xiaoyezi/template/'
 MEMBER_RECORD_PATH = os_documents_path + u'robot_data/xiaoyezi/member_record/member_record.txt'
 FONT_PATH = os_documents_path + u'wechat_robot/STXINWEI.TTF'
-WECHAT_QR_PATH = os_documents_path + u'/QR.png'
+WECHAT_QR_PATH = GIT_DATA_FOLD + u'/QR.png'
 LOTTERY_FOLD = os_documents_path + u'robot_data/xiaoyezi/lottery_activity/'
 
 NORMAL_COMMAND_LIST = [u'看活动', u'查积分', u'签到', u'帮助', u'积分玩法', u'积分商品', u'兑换流程']

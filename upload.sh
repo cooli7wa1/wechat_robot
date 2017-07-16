@@ -13,7 +13,8 @@ fi
 echo -e "\033[34m ==> enter mongodb fold \033[0m"
 cd $MONGODB_BACKUP_PATH
 echo -e "\033[34m ==> mongodump \033[0m"
-mongodump
+mongodump -d wechat
+mongodump -d lianmeng
 if [ $? -ne 0 ];then
 	echo -e "\033[31m something wrong \033[0m"
 	exit 1
