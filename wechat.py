@@ -760,15 +760,15 @@ class LotteryActivity:
                                                  str(points), str(cur_points))
         SendMessageToRoom(TARGET_ROOM,  u'报名积分已经扣除')
         # add points to lucky boy
+        for i in range(5):
+            SendMessageToRoom(TARGET_ROOM, u'倒计时：%d' % (5-i))
+            time.sleep(1)
         points = LOTTERY_REWARD_POINTS
         Database().DatabaseChangePoints(luck_boy, points)
         cur_points = Database().DatabaseViewPoints(luck_boy)
         IntegralRecord().IntegralRecordAddRecord(luck_boy, u'抽奖奖励积分', 'None', 'None',
                                                  str(points), str(cur_points))
         # send result to group
-        for i in range(5):
-            SendMessageToRoom(TARGET_ROOM, u'倒计时：%d' % (5-i))
-            time.sleep(1)
         nick_name = Database().DatebaseGetInfoByInnerId(luck_boy)[u'NickName']
         SendMessageToRoom(TARGET_ROOM, u'\U0001F525恭喜【%s】获得奖励积分【%d】!!\U0001F525' % (nick_name, LOTTERY_REWARD_POINTS))
         logging.debug('==== 结束')
