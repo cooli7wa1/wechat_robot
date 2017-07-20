@@ -695,7 +695,7 @@ class LotteryActivity:
             SendMessageToRoom(TARGET_ROOM, u'[啤酒]抽奖活动开始喽\n'
                                            u'[啤酒]输入【抽奖】报名参加\n'
                                            u'[咖啡]奖励%d积分\n'
-                                           u'[咖啡]门票%d积分\n'
+                                           u'[咖啡]门票%d积分（开奖时扣除）\n'
                                            u'[咖啡]报名人数限制【%d】\n'
                                            u'[咖啡]报名截止时间【%s】'
                               % (LOTTERY_REWARD_POINTS, LOTTERY_POINTS, LOTTERY_MAX_NUM, self.time_e))
@@ -758,6 +758,7 @@ class LotteryActivity:
             cur_points = Database().DatabaseViewPoints(user)
             IntegralRecord().IntegralRecordAddRecord(user, u'抽奖扣除积分', 'None', 'None',
                                                  str(points), str(cur_points))
+        SendMessageToRoom(TARGET_ROOM,  u'报名积分已经扣除')
         # add points to lucky boy
         points = LOTTERY_REWARD_POINTS
         Database().DatabaseChangePoints(luck_boy, points)
@@ -765,8 +766,11 @@ class LotteryActivity:
         IntegralRecord().IntegralRecordAddRecord(luck_boy, u'抽奖奖励积分', 'None', 'None',
                                                  str(points), str(cur_points))
         # send result to group
+        for i in range(5):
+            SendMessageToRoom(TARGET_ROOM, u'倒计时：%d' % (5-i))
+            time.sleep(1)
         nick_name = Database().DatebaseGetInfoByInnerId(luck_boy)[u'NickName']
-        SendMessageToRoom(TARGET_ROOM, u'恭喜【%s】获得奖励积分【%d】' % (nick_name, LOTTERY_REWARD_POINTS))
+        SendMessageToRoom(TARGET_ROOM, u'\U0001F525恭喜【%s】获得奖励积分【%d】!!\U0001F525' % (nick_name, LOTTERY_REWARD_POINTS))
         logging.debug('==== 结束')
 
     def join(self, user_name, to_name, nick_name):
@@ -1369,39 +1373,6 @@ class StaticWindow(wx.StaticText):
     def __init__(self, parent, id=-1, label=u'', pos=wx.DefaultPosition, size=(100, 25)):
         wx.StaticText.__init__(self, parent, id, label, pos, size)
         self.SetMinSize(size)
-
-# class MyTable(wx.grid.PyGridTableBase):
-#     def __init__(self):
-#         wx.grid.PyGridTableBase.__init__(self)
-#         self.database_data = Database().DatabaseGetAllData()
-#         self.labels = Database().DatabaseGetLabels()
-#         self.col_labels = self.labels[1]
-#         self.row_labels = self.labels[0]
-#
-#     def GetNumberRows(self):
-#         return len(self.row_labels)
-#
-#     def GetNumberCols(self):
-#         return len(self.col_labels)
-#
-#     def GetColLabelValue(self, col):
-#         return self.col_labels[col]
-#
-#     def GetRowLabelValue(self, row):
-#         return self.row_labels[row]
-#
-#     def IsEmptyCell(self,row,col):
-#         return False
-#
-#     def GetValue(self,row,col):
-#         value = self.database_data[self.row_labels[row]][self.col_labels[col]]
-#         return value
-#
-#     def SetValue(self,row,col,value):
-#         pass
-#
-#     def GetAttr(self,row,col,kind):
-#         pass
 
 class MyFrame(wx.Frame):
     def __init__(self):
