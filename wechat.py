@@ -253,7 +253,7 @@ class Database:
                                str(father_points_new))))
         logging.debug('==== 结束')
 
-    def DatabaseChangePoints(self, inner_id, points):
+    def DatabaseChangePoints(self, inner_id, points, father=True):
         logging.debug('==== 开始')
         logging.debug('==== InnerId %s, Points %d' % (inner_id, points))
         try:
@@ -267,9 +267,10 @@ class Database:
             self.db_table_wechat_users.update_one({u'InnerId': inner_id},
                                  {"$set": {u'Points': p}})
             logging.debug('==== After: %s' % self.db_table_wechat_users.find({u'InnerId':inner_id}).next())
-            # add points to father
-            if info[u'Father'] and points > 0:
-                self.__DatabaseChangeFahterPoints(info[u'Father'], info[u'NickName'], points)
+            if father:
+                # add points to father
+                if info[u'Father'] and points > 0:
+                    self.__DatabaseChangeFahterPoints(info[u'Father'], info[u'NickName'], points)
             return SUCCESS
         finally:
             logging.debug('==== 结束')
@@ -667,44 +668,44 @@ class MemberRecord:
 
 class LotteryActivity:
     is_start = False
-    join_lock = threading.Lock()
-    user_num = 0
-    file_name = '0.txt'
     def __init__(self):
-        l = LOTTERY_TIME.split(' ')
-        self.time_s = l[0]
-        self.time_e = l[1]
+        self.user_num = 0  # 当前报名人数
+        self.file_name = '0.txt'  # 当前活动记录的文件名
+        self.join_lock = threading.Lock()  # 操作记录锁
+        self.activity_dict = {}  # 活动列表
+        self.cur_activity = {}  # 当前进行活动信息
 
-    def sendRemNotice(self):
-        '''timing send notice to group
-        '''
-        SendMessageToRoom(TARGET_ROOM, u'抽奖活动将于今天【%s】开始哦' % self.time_s)
+        b_times = LOTTERY_TIME.split(' ')
+        for i in range(len(b_times)):
+            b_time = b_times[i]
+            b_h, b_m = b_time.split(':')
+            t_b_time = int(b_h)*60 + int(b_m)
+            t_e_time = t_b_time + 30
+            e_time = '%d:%d' % (t_e_time/60,t_e_time%60)
+            i_time = {}
+            for i in range(6):
+                t_i_time = t_b_time + 5
+                i_time[i] = '%d:%d' % (t_i_time/60,t_i_time%60)
+            self.activity_dict[i] = {'b':b_time, 'e':e_time, 'i':i_time}
+            print(self.activity_dict)
 
     def sendBeginNotice(self):
         '''when begin, send notice every 5 minutes
         '''
         logging.debug('==== 开始')
-        while True:
-            cur_time = time.strftime('%H:%M', time.localtime())
-            h, m= [int(i) for i in cur_time.split(':')]
-            h_e, m_e = [int(i) for i in self.time_e.split(':')]
-            if h*60+m >= h_e*60+m_e:
-                break
-            if LotteryActivity.is_start == False:
-                break
-            SendMessageToRoom(TARGET_ROOM, u'[啤酒]抽奖活动开始喽\n'
-                                           u'[啤酒]输入【抽奖】报名参加\n'
-                                           u'[咖啡]奖励%d积分\n'
-                                           u'[咖啡]门票%d积分（开奖时扣除）\n'
-                                           u'[咖啡]报名人数限制【%d】\n'
-                                           u'[咖啡]报名截止时间【%s】'
-                              % (LOTTERY_REWARD_POINTS, LOTTERY_POINTS, LOTTERY_MAX_NUM, self.time_e))
-            time.sleep(5*60)
+        if LotteryActivity.is_start == False:
+            return
+        SendMessageToRoom(TARGET_ROOM, u'[啤酒]抽奖活动开始喽\n'
+                                       u'[啤酒]输入【抽奖】报名参加\n'
+                                       u'[咖啡]奖励%d积分\n'
+                                       u'[咖啡]门票%d积分（开奖时扣除）\n'
+                                       u'[咖啡]报名人数限制【%d】\n'
+                                       u'[咖啡]报名截止时间【%s】'
+            % (LOTTERY_REWARD_POINTS, LOTTERY_POINTS, LOTTERY_MAX_NUM, self.cur_activity['e']))
         logging.debug('==== 结束')
 
-    def beginActivity(self):
+    def beginActivity(self, activity_index):
         logging.debug('==== 开始')
-        LotteryActivity.user_num = 0
         files = os.listdir(LOTTERY_FOLD)
         l = []
         for f in files:
@@ -715,19 +716,16 @@ class LotteryActivity:
         else:
             LotteryActivity.file_name = str(sorted(l)[len(l)-1] + 1) + '.txt'
         LotteryActivity.is_start = True
-        thread = threading.Thread(target=self.sendBeginNotice)
-        thread.setDaemon(True)
-        thread.start()
-        thread.name = u'sendBeginNotice thread ' + time.strftime('%d_%H%M%S', time.localtime(time.time()))
+        self.cur_activity = self.activity_dict[activity_index]
+        self.user_num = 0
         logging.debug('==== 结束')
 
     def endActivity(self):
         logging.debug('==== 开始')
         if LotteryActivity.is_start == False:
             return
-        LotteryActivity.is_start = False
         try:
-            if LotteryActivity.user_num >= LOTTERY_MAX_NUM:
+            if self.user_num >= LOTTERY_MAX_NUM:
                 msg = u'抽奖报名人数已满，开始计算抽奖结果'
                 SendMessageToRoom(TARGET_ROOM, msg)
             else:
@@ -736,19 +734,19 @@ class LotteryActivity:
                 return
             self.calResult()
         finally:
-            LotteryActivity.user_num = 0
+            LotteryActivity.is_start = False
+            self.user_num = 0
             logging.debug('==== 结束')
 
     def calResult(self):
         '''we should check user_numbers, and choose one as a lucky boy
         '''
         logging.debug('==== 开始')
-        # get users, choose lucy boy
         users = []
         luck_boy = u''
-        with codecs.open(LOTTERY_FOLD+LotteryActivity.file_name, 'r+', 'utf-8') as f:
+        with codecs.open(LOTTERY_FOLD + self.file_name, 'r+', 'utf-8') as f:
             line = f.readline()
-            users = line.strip().split(' ')
+            users = line.strip().split('@@')
             luck_boy = random.choice(users)
             f.write('\n'+luck_boy)
         # deduce points
@@ -764,7 +762,7 @@ class LotteryActivity:
             SendMessageToRoom(TARGET_ROOM, u'倒计时：%d' % (5-i))
             time.sleep(1)
         points = LOTTERY_REWARD_POINTS
-        Database().DatabaseChangePoints(luck_boy, points)
+        Database().DatabaseChangePoints(luck_boy, points, father=False)
         cur_points = Database().DatabaseViewPoints(luck_boy)
         IntegralRecord().IntegralRecordAddRecord(luck_boy, u'抽奖奖励积分', 'None', 'None',
                                                  str(points), str(cur_points))
@@ -776,7 +774,7 @@ class LotteryActivity:
     def join(self, user_name, to_name, nick_name):
         '''someone join into the activity
         '''
-        LotteryActivity.join_lock.acquire()
+        self.join_lock.acquire()
         try:
             logging.debug('==== 开始')
             # multhread, so we should check if activity is end
@@ -784,7 +782,7 @@ class LotteryActivity:
                 SendMessage('@msg@%s' % (u'@%s, 活动刚刚结束了， 下次再参加吧' % nick_name), to_name)
                 return
             # check current user number
-            if LotteryActivity.user_num >= LOTTERY_MAX_NUM:
+            if self.user_num >= LOTTERY_MAX_NUM:
                 SendMessage('@msg@%s' % (u'@%s, 当前报名人数已满, 下次再参加吧' % nick_name), to_name)
                 return
             # check user points
@@ -801,22 +799,27 @@ class LotteryActivity:
                 SendMessage('@msg@%s' % (u'@%s, 您的积分不足,无法参加抽奖,所需积分【%d】' % (nick_name, LOTTERY_POINTS)), to_name)
                 return
             # join in
-            with codecs.open(LOTTERY_FOLD+LotteryActivity.file_name, 'a', 'utf-8') as f:
+            with codecs.open(LOTTERY_FOLD + self.file_name, 'a', 'utf-8') as f:
                 inner_id = UserName_InnerId[user_name][u'InnerId']
-                f.write(inner_id + ' ')
-            LotteryActivity.user_num += 1
+                f.write(inner_id + '@@')
+            self.user_num += 1
             # send message to user
-            SendMessage('@msg@%s' % (u'@%s 抽奖报名成功, 当前参加人数【%d】' % (nick_name, LotteryActivity.user_num)), to_name)
-            if LotteryActivity.user_num >= LOTTERY_MAX_NUM:
+            SendMessage('@msg@%s' % (u'@%s 抽奖报名成功\n'
+                                     u'当前参加人数【%d】\n'
+                                     u'开奖人数【%d】' % (nick_name, self.user_num, LOTTERY_MAX_NUM)), to_name)
+            if self.user_num >= LOTTERY_MAX_NUM:
                 self.endActivity()
         finally:
             logging.debug('==== 结束')
-            LotteryActivity.join_lock.release()
+            self.join_lock.release()
 
     def scheduleThread(self):
-        # schedule.every(1).minutes.do(self.beginActivity)
-        schedule.every().day.at(self.time_s).do(self.beginActivity)
-        schedule.every().day.at(self.time_e).do(self.endActivity)
+        for t in self.activity_dict.values():
+            activity_index = self.activity_dict.values().index(t)
+            schedule.every().day.at(t['b']).do(self.beginActivity, activity_index)
+            schedule.every().day.at(t['e']).do(self.endActivity)
+            for i in t['i'].values():
+                schedule.every().day.at(i).do(self.sendBeginNotice)
         while True:
             schedule.run_pending()
             time.sleep(5)
@@ -1155,15 +1158,9 @@ def special_command_router(msg, nick_name):
             if LotteryActivity.is_start:
                 LotteryActivity().join(user_name, to_name, nick_name)
             else:
-                time_s, time_e = LOTTERY_TIME.split(' ')
-                cur_time = time.strftime('%H:%M', time.localtime())
-                h, m = [int(i) for i in cur_time.split(':')]
-                h_s, m_s = [int(i) for i in time_s.split(':')]
-                if h*60+m < h_s*60+m_s:
-                    SendMessage('@msg@%s' % (u'@%s 亲，抽奖活动将于%s开始' % (nick_name, time_s)), to_name)
-                else:
-                    SendMessage('@msg@%s' % (u'@%s 亲，抽奖活动已经结束，抽奖活动于每天【%s】开始'
-                                             % (nick_name, time_s)), to_name)
+                SendMessage('@msg@%s' % (u'@%s 亲，没有进行中的抽奖活动\n'
+                                         u'抽奖活动于每天【%s】开始'
+                            % (nick_name, LOTTERY_TIME)), to_name)
 
         logging.debug('==== 结束')
         return
