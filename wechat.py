@@ -1188,19 +1188,19 @@ def group_text_reply(msg):
         if text in SPECIAL_COMMAND_LIST:
             logging.debug('==== 来自：%s，聊天内容：%s' % (nick_name, msg[u'Text']))
             special_command_router(msg, nick_name)
-        # elif re.match(u'找 .*', text):
-        #     key_word = text[2:].strip()
-        #     logging.debug('==== 来自：%s，收到查找商品命令: %s' % (nick_name, text))
-        #     package = make_package(room=msg[u'FromUserName'], user=msg[u'ActualUserName'], nick=nick_name,
-        #                            content=key_word, type=u'cmd', subtype=u'find')
-        #     ret = communicate_with_lianmeng().send_msg_to_lianmeng(package)
-        #     if ret == QUEUE_FULL:
-        #         SendMessage('@msg@%s' % ('@%s 当前查找人数太多，请稍后再试' % nick_name), msg[u'FromUserName'])
-        #         return
-        #     SendMessage('@msg@%s' % ('@%s 正在为您查找商品【%s】，请稍等...' % (nick_name, key_word)), msg[u'FromUserName'])
-        # elif text == u'下一页':
-        #     logging.debug('==== 收到命令，下一页')
-        #     communicate_with_lianmeng().send_goods_to_user({u'room': msg[u'FromUserName'], u'user': msg[u'ActualUserName'], u'nick': nick_name})
+        elif re.match(u'找 .*', text):
+            key_word = text[2:].strip()
+            logging.debug('==== 来自：%s，收到查找商品命令: %s' % (nick_name, text))
+            package = make_package(room=msg[u'FromUserName'], user=msg[u'ActualUserName'], nick=nick_name,
+                                   content=key_word, type=u'cmd', subtype=u'find')
+            ret = communicate_with_lianmeng().send_msg_to_lianmeng(package)
+            if ret == QUEUE_FULL:
+                SendMessage('@msg@%s' % ('@%s 当前查找人数太多，请稍后再试' % nick_name), msg[u'FromUserName'])
+                return
+            SendMessage('@msg@%s' % ('@%s 正在为您查找商品【%s】，请稍等...' % (nick_name, key_word)), msg[u'FromUserName'])
+        elif text == u'下一页':
+            logging.debug('==== 收到命令，下一页')
+            communicate_with_lianmeng().send_goods_to_user({u'room': msg[u'FromUserName'], u'user': msg[u'ActualUserName'], u'nick': nick_name})
         elif GetRoomUserNameByNickName(INNER_ROOM_NICK_NAME) == msg[u'FromUserName']:
             master_command_router(msg)
         logging.debug('==== 结束')
@@ -1662,12 +1662,17 @@ class communicate_with_lianmeng:
 
     def browser_init(self):
         # 根据LIST来初始化相应的browser
-        for room in MONITOR_ROOM_LIST:
-            room_name = GetRoomUserNameByNickName(room)
-            package = make_package(type=u'cmd', subtype=u'init', room=room_name)
-            ret = self.send_msg_to_lianmeng(package)
-            if ret == QUEUE_FULL:
-                log_and_send_error_msg('browser init failed', '', 'Queue full')
+        # for room in MONITOR_ROOM_LIST:
+        #     room_name = GetRoomUserNameByNickName(room)
+        #     package = make_package(type=u'cmd', subtype=u'init', room=room_name)
+        #     ret = self.send_msg_to_lianmeng(package)
+        #     if ret == QUEUE_FULL:
+        #         log_and_send_error_msg('browser init failed', '', 'Queue full')
+        room_name = GetRoomUserNameByNickName(ROOM_NICK_NAME)
+        package = make_package(type=u'cmd', subtype=u'init', room=room_name)
+        ret = self.send_msg_to_lianmeng(package)
+        if ret == QUEUE_FULL:
+            log_and_send_error_msg('browser init failed', '', 'Queue full')
 
     def send_goods_to_user(self, msg):
         p = threading.Thread(target=SendGoodsToUser, args=(msg[u'room'], msg[u'user'], msg[u'nick']))
@@ -1758,10 +1763,10 @@ def init_thread(q_main_wechat, q_wechat_main, q_wechat_lianmeng, q_lianmeng_wech
     for room in MONITOR_ROOM_LIST:
         monitor_room_user_name.append(GetRoomUserNameByNickName(room))
     logging.info('init_thread: 创建接收lianmeng进程命令的线程')
-    #communicate_with_lianmeng.q_out = q_wechat_lianmeng
-    #communicate_with_lianmeng.q_in = q_lianmeng_wechat
-    #communicate_with_lianmeng().create_receive_from_lianmeng_thread()
-    #communicate_with_lianmeng().browser_init()
+    communicate_with_lianmeng.q_out = q_wechat_lianmeng
+    communicate_with_lianmeng.q_in = q_lianmeng_wechat
+    communicate_with_lianmeng().create_receive_from_lianmeng_thread()
+    communicate_with_lianmeng().browser_init()
     logging.info('init_thread: 创建抽奖线程')
     LotteryActivity().createSchedule()
 

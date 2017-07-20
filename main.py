@@ -31,12 +31,12 @@ class OtherProcess:
         OtherProcess.p_wechat.start()
         logging.info('Init wechat 进程 ok')
 
-        #OtherProcess.p_lianmeng = Process(target=lianmeng_main, name=u'lianmeng_main',
-        #                                  args=(OtherProcess.q_main_lianmeng, OtherProcess.q_lianmeng_main,
-        #                                        OtherProcess.q_wechat_lianmeng, OtherProcess.q_lianmeng_wechat,))
-        #OtherProcess.p_lianmeng.daemon = True
-        #OtherProcess.p_lianmeng.start()
-        #logging.info('Init lianmeng 进程 ok')
+        OtherProcess.p_lianmeng = Process(target=lianmeng_main, name=u'lianmeng_main',
+                                         args=(OtherProcess.q_main_lianmeng, OtherProcess.q_lianmeng_main,
+                                               OtherProcess.q_wechat_lianmeng, OtherProcess.q_lianmeng_wechat,))
+        OtherProcess.p_lianmeng.daemon = True
+        OtherProcess.p_lianmeng.start()
+        logging.info('Init lianmeng 进程 ok')
 
     def TerminateProcess(self, p):
         p.terminate()
@@ -122,9 +122,9 @@ if __name__ == '__main__':
     communicate_with_wechat.q_out = OtherProcess.q_main_wechat
     communicate_with_wechat().create_receive_from_wechat_thread()
 
-    #communicate_with_lianmeng.q_in = OtherProcess.q_lianmeng_main
-    #communicate_with_lianmeng.q_out = OtherProcess.q_main_lianmeng
-    #communicate_with_lianmeng().create_receive_from_lianmeng_thread()
+    communicate_with_lianmeng.q_in = OtherProcess.q_lianmeng_main
+    communicate_with_lianmeng.q_out = OtherProcess.q_main_lianmeng
+    communicate_with_lianmeng().create_receive_from_lianmeng_thread()
 
     os_home = os.popen('echo $HOME').read().replace('\n', '')
     if not os_home == u'/root':
