@@ -137,10 +137,6 @@ def username_link_to_db(user_name, nick_name):
         UserName_InnerId[user_name] = {u'InnerId': inner_id, u'ZhiFuBaoZH': zhifubao}
         return UserName_InnerId[user_name]
 
-# def ReturnValue(result, value=None):
-#     return_dict = {u'result':result, u'value':value}
-#     return return_dict
-
 class UserData:
     def __init__(self, NickName, InnerId, ZhiFuBaoZH=u'', Province=u'', City=u'',
                  Sex=u'', Group=u'user', Grade=0, Points=0, LastCheckIn=u'', Father=u''):
@@ -668,12 +664,13 @@ class MemberRecord:
 
 class LotteryActivity:
     is_start = False
+    users = []  # 当前报名人列表
+    file_name = '0.txt'  # 当前活动记录的文件名
+    join_lock = threading.Lock()  # 操作记录锁
+    activity_dict = {}  # 活动列表
+    cur_activity = {}  # 当前进行活动信息
+
     def __init__(self):
-        self.user_num = 0  # 当前报名人数
-        self.file_name = '0.txt'  # 当前活动记录的文件名
-        self.join_lock = threading.Lock()  # 操作记录锁
-        self.activity_dict = {}  # 活动列表
-        self.cur_activity = {}  # 当前进行活动信息
 
         b_times = LOTTERY_TIME.split(' ')
         for i in range(len(b_times)):
@@ -687,8 +684,17 @@ class LotteryActivity:
             for j in range(6):
                 i_time[j] = '%d:%d' % (t_i_time/60,t_i_time%60)
                 t_i_time = t_i_time + 5
-            self.activity_dict[i] = {'b':b_time, 'e':e_time, 'i':i_time}
-            logging.debug(self.activity_dict)
+            LotteryActivity.activity_dict[i] = {'b':b_time, 'e':e_time, 'i':i_time}
+            logging.debug(LotteryActivity.activity_dict)
+
+    def _getJoinedUserNick(self):
+        ''' get user_nick_name who joined this activity
+            return: nick_name str with \n
+        '''
+        str = u''
+        for user in LotteryActivity.users:
+            str += user[u'nick'] + u'\n'
+        return str
 
     def sendBeginNotice(self):
         '''when begin, send notice every 5 minutes
@@ -698,11 +704,12 @@ class LotteryActivity:
             return
         SendMessageToRoom(TARGET_ROOM, u'[啤酒]抽奖活动开始喽\n'
                                        u'[啤酒]输入【抽奖】报名参加\n'
-                                       u'[咖啡]奖励%d积分\n'
-                                       u'[咖啡]门票%d积分（开奖时扣除）\n'
+                                       u'[咖啡]奖励【%d】积分\n'
+                                       u'[咖啡]门票【%d】积分（开奖时扣除）\n'
                                        u'[咖啡]报名人数限制【%d】\n'
-                                       u'[咖啡]报名截止时间【%s】'
-            % (LOTTERY_REWARD_POINTS, LOTTERY_POINTS, LOTTERY_MAX_NUM, self.cur_activity['e']))
+                                       u'[咖啡]报名截止时间【%s】\n'
+                                       u'\U0001F4DD当前报名人数【%d】'
+            % (LOTTERY_REWARD_POINTS, LOTTERY_POINTS, LOTTERY_MAX_NUM, LotteryActivity.cur_activity['e'], len(LotteryActivity.users)))
         logging.debug('==== 结束')
 
     def beginActivity(self, activity_index):
@@ -716,9 +723,10 @@ class LotteryActivity:
             LotteryActivity.file_name = '0.txt'
         else:
             LotteryActivity.file_name = str(sorted(l)[len(l)-1] + 1) + '.txt'
+        print(l)
+        print(LotteryActivity.file_name)
         LotteryActivity.is_start = True
-        self.cur_activity = self.activity_dict[activity_index]
-        self.user_num = 0
+        LotteryActivity.cur_activity = LotteryActivity.activity_dict[activity_index]
         logging.debug('==== 结束')
 
     def endActivity(self):
@@ -726,50 +734,52 @@ class LotteryActivity:
         if LotteryActivity.is_start == False:
             return
         try:
-            if self.user_num >= LOTTERY_MAX_NUM:
-                msg = u'抽奖报名人数已满，开始计算抽奖结果'
+            if len(LotteryActivity.users) >= LOTTERY_MAX_NUM:
+                msg = u'\U0001F60E抽奖报名人数已满\n' \
+                      u'\U0001F647扣除门票积分\n' \
+                      u'\U0001F647抽取幸运用户...'
                 SendMessageToRoom(TARGET_ROOM, msg)
             else:
-                msg = u'抽奖报名人数不足【%d】人，无法开奖，活动结束' % LOTTERY_MAX_NUM
+                msg = u'\U0001F61F抽奖报名人数不足【%d】人\n' \
+                      u'\U0001F61F无法开奖，本次活动结束' % LOTTERY_MAX_NUM
                 SendMessageToRoom(TARGET_ROOM, msg)
                 return
             self.calResult()
         finally:
             LotteryActivity.is_start = False
-            self.user_num = 0
+            LotteryActivity.users = []
             logging.debug('==== 结束')
 
     def calResult(self):
         '''we should check user_numbers, and choose one as a lucky boy
         '''
         logging.debug('==== 开始')
-        users = []
-        luck_boy = u''
-        with codecs.open(LOTTERY_FOLD + self.file_name, 'r+', 'utf-8') as f:
-            line = f.readline()
-            users = line.strip().split('@@')
-            luck_boy = random.choice(users)
-            f.write('\n'+luck_boy)
+        with codecs.open(LOTTERY_FOLD + LotteryActivity.file_name, 'a', 'utf-8') as f:
+            luck_boy = random.choice(LotteryActivity.users)
+            f.write('\n%s#%s' % (luck_boy[u'inner'], luck_boy[u'nick']))
         # deduce points
-        for user in users:
+        for user in LotteryActivity.users:
             points = 0 - LOTTERY_POINTS
-            Database().DatabaseChangePoints(user, points)
-            cur_points = Database().DatabaseViewPoints(user)
-            IntegralRecord().IntegralRecordAddRecord(user, u'抽奖扣除积分', 'None', 'None',
+            Database().DatabaseChangePoints(user[u'inner'], points)
+            cur_points = Database().DatabaseViewPoints(user[u'inner'])
+            IntegralRecord().IntegralRecordAddRecord(user[u'inner'], u'抽奖扣除积分', 'None', 'None',
                                                  str(points), str(cur_points))
-        SendMessageToRoom(TARGET_ROOM,  u'报名积分已经扣除')
-        # add points to lucky boy
+        # send delay msg, and add points to lucky boy
         for i in range(5):
-            SendMessageToRoom(TARGET_ROOM, u'倒计时：%d' % (5-i))
+            SendMessageToRoom(TARGET_ROOM, u'抽奖倒计时：%d' % (5-i))
             time.sleep(1)
         points = LOTTERY_REWARD_POINTS
-        Database().DatabaseChangePoints(luck_boy, points, father=False)
-        cur_points = Database().DatabaseViewPoints(luck_boy)
-        IntegralRecord().IntegralRecordAddRecord(luck_boy, u'抽奖奖励积分', 'None', 'None',
+        Database().DatabaseChangePoints(luck_boy[u'inner'], points, father=False)
+        cur_points = Database().DatabaseViewPoints(luck_boy[u'inner'])
+        IntegralRecord().IntegralRecordAddRecord(luck_boy[u'inner'], u'抽奖奖励积分', 'None', 'None',
                                                  str(points), str(cur_points))
         # send result to group
-        nick_name = Database().DatebaseGetInfoByInnerId(luck_boy)[u'NickName']
-        SendMessageToRoom(TARGET_ROOM, u'\U0001F525恭喜【%s】获得奖励积分【%d】!!\U0001F525' % (nick_name, LOTTERY_REWARD_POINTS))
+        nick_str = self._getJoinedUserNick()
+        SendMessageToRoom(TARGET_ROOM, u'\U0001F389恭喜【%s】\U0001F389\n'
+                                       u'\U0001F389抽到奖励积分【%d】\U0001F389\n'
+                                       u'\U0001F4DC报名人:\n'
+                                       u'%s'
+                          % (luck_boy[u'nick'], LOTTERY_REWARD_POINTS, nick_str))
         logging.debug('==== 结束')
 
     def join(self, user_name, to_name, nick_name):
@@ -783,44 +793,49 @@ class LotteryActivity:
                 SendMessage('@msg@%s' % (u'@%s, 活动刚刚结束了， 下次再参加吧' % nick_name), to_name)
                 return
             # check current user number
-            if self.user_num >= LOTTERY_MAX_NUM:
+            if len(LotteryActivity.users) >= LOTTERY_MAX_NUM:
                 SendMessage('@msg@%s' % (u'@%s, 当前报名人数已满, 下次再参加吧' % nick_name), to_name)
                 return
             # check user points
             points = user_view_points(user_name, nick_name)
             if points < 0:
                 if points == WECHAT_NOT_FIND:
-                    SendMessage('@msg@%s' % ('@%s 亲，数据库中未找到昵称\n可能您是新用户或者更改了昵称\n请私聊联系小叶子处理') % nick_name, to_name)
+                    SendMessage('@msg@%s' % (u'@%s 亲，数据库中未找到昵称\n可能您是新用户或者更改了昵称\n请私聊联系小叶子处理') % nick_name, to_name)
                 elif points == WECHAT_NO_ZHIFUBAOZH:
-                    SendMessage('@msg@%s' % ('@%s 您还未设置支付宝\n请私聊联系小叶子处理' % nick_name), to_name)
+                    SendMessage('@msg@%s' % (u'@%s 您还未设置支付宝\n请私聊联系小叶子处理' % nick_name), to_name)
                 else:
-                    SendMessage('@msg@%s' % ('@%s O，NO，发生了一些错误，稍后再试吧' % nick_name), to_name)
+                    SendMessage('@msg@%s' % (u'@%s O，NO，发生了一些错误，稍后再试吧' % nick_name), to_name)
                 return
             elif points < LOTTERY_POINTS:
                 SendMessage('@msg@%s' % (u'@%s, 您的积分不足,无法参加抽奖,所需积分【%d】' % (nick_name, LOTTERY_POINTS)), to_name)
                 return
             # join in
-            with codecs.open(LOTTERY_FOLD + self.file_name, 'a', 'utf-8') as f:
+            with codecs.open(LOTTERY_FOLD + LotteryActivity.file_name, 'a', 'utf-8') as f:
                 inner_id = UserName_InnerId[user_name][u'InnerId']
-                f.write(inner_id + '@@')
-            self.user_num += 1
+                f.write(u'%s#%s@' % (inner_id, nick_name))
+                LotteryActivity.users.append({'nick':nick_name,'inner':inner_id})
             # send message to user
-            SendMessage('@msg@%s' % (u'@%s 抽奖报名成功\n'
-                                     u'当前参加人数【%d】\n'
-                                     u'开奖人数【%d】' % (nick_name, self.user_num, LOTTERY_MAX_NUM)), to_name)
-            if self.user_num >= LOTTERY_MAX_NUM:
+            nick_str = self._getJoinedUserNick()
+            SendMessage('@msg@%s' % (u'@%s\n'
+                                     u'\U0001F600抽奖报名成功\n'
+                                     u'\U0001F4DD当前参加人数%d/%d\n'
+                                     u'\U0001F4DC报名人：\n'
+                                     u'%s'
+                       % (nick_name, len(LotteryActivity.users), LOTTERY_MAX_NUM, nick_str)), to_name)
+            if len(LotteryActivity.users) >= LOTTERY_MAX_NUM:
                 self.endActivity()
         finally:
             logging.debug('==== 结束')
             self.join_lock.release()
 
     def scheduleThread(self):
-        for t in self.activity_dict.values():
-            activity_index = self.activity_dict.values().index(t)
+        for t in LotteryActivity.activity_dict.values():
+            activity_index = LotteryActivity.activity_dict.values().index(t)
             schedule.every().day.at(t['b']).do(self.beginActivity, activity_index)
             schedule.every().day.at(t['e']).do(self.endActivity)
             for i in t['i'].values():
                 schedule.every().day.at(i).do(self.sendBeginNotice)
+        # schedule.every().minute.do(self.beginActivity, 0)
         while True:
             schedule.run_pending()
             time.sleep(5)
@@ -1601,11 +1616,11 @@ def CleanThread():
                     # del info self
                     db_table.delete_one({'_id': ObjectId(info['_id'])})
         # clean log
-#        logging.debug('==== CLEAN THREAD 正在清理过期LOG')
-#        log_files = os.listdir(LOG_FOLD)
-#        for file in log_files:
-#            if int(file.split('_')[1]) < time_ori - LOG_CLEAN_TIME_INTERVAL:
-#                os.remove(LOG_FOLD+file)
+        # logging.debug('==== CLEAN THREAD 正在清理过期LOG')
+        # log_files = os.listdir(LOG_FOLD)
+        # for file in log_files:
+        #    if int(file.split('_')[1]) < time_ori - LOG_CLEAN_TIME_INTERVAL:
+        #        os.remove(LOG_FOLD+file)
         # clean codeimage, 只保留最后一个
         logging.debug('==== CLEAN THREAD 正在清理残留的codeimage')
         image_files = os.listdir(CODE_IMAGE_FOLD_PATH)

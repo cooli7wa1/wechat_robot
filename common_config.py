@@ -37,7 +37,8 @@ LOG_FOLD = os_documents_path + u'robot_data/xiaoyezi/log/'
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s %(funcName)s[line:%(lineno)d] %(levelname)s %(message)s',
                     datefmt='%a %d %b %Y %H:%M:%S',
-                    filename='%slog_%d_%s.txt' % (LOG_FOLD, int(time.time()), time.strftime('%Y-%m-%d-%H%M%S', time.localtime(time.time()))),
+                    # filename='%slog_%d_%s.txt' % (LOG_FOLD, int(time.time()), time.strftime('%Y-%m-%d-%H%M%S', time.localtime(time.time()))),
+                    filename='%slog.txt' % LOG_FOLD,
                     filemode='w')
 
 console = logging.StreamHandler()
