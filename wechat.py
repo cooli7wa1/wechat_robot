@@ -685,8 +685,8 @@ class LotteryActivity:
             i_time = {}
             t_i_time = t_b_time
             for j in range(6):
-                t_i_time = t_i_time + 5
                 i_time[j] = '%d:%d' % (t_i_time/60,t_i_time%60)
+                t_i_time = t_i_time + 5
             self.activity_dict[i] = {'b':b_time, 'e':e_time, 'i':i_time}
             logging.debug(self.activity_dict)
 
