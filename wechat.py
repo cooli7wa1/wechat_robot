@@ -683,11 +683,12 @@ class LotteryActivity:
             t_e_time = t_b_time + 30
             e_time = '%d:%d' % (t_e_time/60,t_e_time%60)
             i_time = {}
-            for i in range(6):
-                t_i_time = t_b_time + 5
-                i_time[i] = '%d:%d' % (t_i_time/60,t_i_time%60)
+            t_i_time = t_b_time
+            for j in range(6):
+                t_i_time = t_i_time + 5
+                i_time[j] = '%d:%d' % (t_i_time/60,t_i_time%60)
             self.activity_dict[i] = {'b':b_time, 'e':e_time, 'i':i_time}
-            print(self.activity_dict)
+            logging.debug(self.activity_dict)
 
     def sendBeginNotice(self):
         '''when begin, send notice every 5 minutes
