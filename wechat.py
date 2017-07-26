@@ -271,6 +271,19 @@ class Database:
         finally:
             logging.debug('==== 结束')
 
+    def DatabaseAllChangePoints(self, points):
+        logging.debug('==== 开始')
+        try:
+            for user_info in self.db_table_wechat_users.find({}):
+                if user_info[u'NickName'] == u'乐淘家':
+                    continue
+                else:
+                    cur_points = user_info[u'Points']
+                    self.db_table_wechat_users.update_one({u'InnerId': user_info[u'InnerId']},
+                                                          {"$set": {u'Points': cur_points+points}})
+        finally:
+            logging.debug('==== 结束')
+
     def DatabaseCheckin(self, inner_id):
         logging.debug('==== 开始')
         logging.debug('==== InnerId %s' % inner_id)
@@ -1509,6 +1522,12 @@ class MyFrame(wx.Frame):
         logging.debug('==== 开始')
         inner_id = self.jljf_objs[u'会员名'].GetValue().encode('utf-8').strip()
         integral = self.jljf_objs[u'奖励积分'].GetValue().strip()
+        if inner_id == u'ltj_all':
+            logging.debug('==== 为所有人增加奖励积分 %s' % integral)
+            Database().DatabaseAllChangePoints(eval(integral))
+            SendMessageToRoom(TARGET_ROOM,
+                              '@msg@%s' % ('亲们，已经为所有人增加奖励积分【%s】' % integral))
+            return
         logging.debug('==== 会员：%s，奖励积分：%s' % (inner_id, integral))
         if not (inner_id and integral):
             logging.error("==== 输入数据有误")
